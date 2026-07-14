@@ -1,9 +1,9 @@
 import { useState } from 'react'
-import { ScrollView, Text, View } from 'react-native'
+import { ScrollView, View } from 'react-native'
 import { router } from 'expo-router'
 import { callEdgeFunction } from '@tscopier/shared'
 import { useAuth } from '@/context/AuthContext'
-import { Button, Card, ErrorText, Field, Screen, Subtitle, Title } from '@/components/ui'
+import { AccentText, BodyText, Button, Card, ErrorText, Field, Screen, Subtitle, Title } from '@/components/ui'
 
 export default function BrokerConnectScreen() {
   const { session } = useAuth()
@@ -53,16 +53,16 @@ export default function BrokerConnectScreen() {
           <Field label="Password" secureTextEntry value={password} onChangeText={setPassword} />
           <Field label="Server" value={server} onChangeText={setServer} placeholder="Broker-Server" />
           <ErrorText>{error}</ErrorText>
-          {success ? <Text className="mb-3 text-teal-400">{success}</Text> : null}
+          {success ? <AccentText className="mb-3">{success}</AccentText> : null}
           <Button label="Connect" loading={loading} onPress={onConnect} />
           <View className="mt-3">
             <Button label="Close" variant="secondary" onPress={() => router.back()} />
           </View>
         </View>
         <Card className="mt-6">
-          <Text className="text-sm text-neutral-400">
+          <BodyText className="text-sm">
             Keep Algo Trading enabled on MT5 and leave the terminal running for reliable copying.
-          </Text>
+          </BodyText>
         </Card>
       </ScrollView>
     </Screen>

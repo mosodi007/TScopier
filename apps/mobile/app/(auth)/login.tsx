@@ -4,7 +4,8 @@ import { Link, router } from 'expo-router'
 import * as WebBrowser from 'expo-web-browser'
 import { makeDeepLink, parseAuthTokensFromUrl } from '@/lib/linking'
 import { supabase } from '@/lib/supabase'
-import { Button, ErrorText, Field, Screen, Subtitle, Title } from '@/components/ui'
+import { ThemeToggle } from '@/components/ThemeToggle'
+import { AccentText, Button, ErrorText, Field, Screen, Subtitle, Title } from '@/components/ui'
 
 export default function LoginScreen() {
   const [email, setEmail] = useState('')
@@ -50,6 +51,9 @@ export default function LoginScreen() {
 
   return (
     <Screen className="justify-center">
+      <View className="absolute right-4 top-4 z-10">
+        <ThemeToggle />
+      </View>
       <ScrollView contentContainerClassName="flex-grow justify-center pb-8">
         <Title>TScopier</Title>
         <Subtitle>Sign in to monitor and control your copier</Subtitle>
@@ -76,11 +80,11 @@ export default function LoginScreen() {
             <Button label="Continue with Google" variant="secondary" onPress={onGoogle} />
           </View>
           <View className="mt-6 flex-row justify-between">
-            <Link href="/(auth)/forgot-password" className="text-teal-400">
-              <Text className="text-teal-400">Forgot password?</Text>
+            <Link href="/(auth)/forgot-password">
+              <AccentText>Forgot password?</AccentText>
             </Link>
             <Link href="/(auth)/signup">
-              <Text className="text-teal-400">Create account</Text>
+              <AccentText>Create account</AccentText>
             </Link>
           </View>
         </View>

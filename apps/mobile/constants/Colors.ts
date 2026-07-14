@@ -1,19 +1,19 @@
-const tintColorLight = '#2f95dc';
-const tintColorDark = '#fff';
-
+/** TScopier brand colors — aligned with web app theme tokens. */
 export default {
   light: {
-    text: '#000',
-    background: '#fff',
-    tint: tintColorLight,
-    tabIconDefault: '#ccc',
-    tabIconSelected: tintColorLight,
+    text: '#0f172a',
+    background: '#f8fafc',
+    surface: '#ffffff',
+    tint: '#0d9488',
+    tabIconDefault: '#64748b',
+    tabIconSelected: '#0d9488',
   },
   dark: {
-    text: '#fff',
-    background: '#000',
-    tint: tintColorDark,
-    tabIconDefault: '#ccc',
-    tabIconSelected: tintColorDark,
+    text: '#f8fafc',
+    background: '#020617',
+    surface: '#0f172a',
+    tint: '#2dd4bf',
+    tabIconDefault: '#64748b',
+    tabIconSelected: '#2dd4bf',
   },
-};
+}

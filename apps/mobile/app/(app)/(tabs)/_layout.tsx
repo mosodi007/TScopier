@@ -1,17 +1,23 @@
 import { Tabs } from 'expo-router'
 import { LayoutDashboard, Bell, Settings, TrendingUp } from 'lucide-react-native'
 import { useNotifications } from '@/context/NotificationsContext'
+import { useTheme } from '@/context/ThemeContext'
+import { tscTheme } from '@/lib/tscTheme'
 
 export default function TabLayout() {
   const { unreadCount } = useNotifications()
+  const { isDark } = useTheme()
 
   return (
     <Tabs
       screenOptions={{
         headerShown: false,
-        tabBarStyle: { backgroundColor: '#0f172a', borderTopColor: '#1e293b' },
-        tabBarActiveTintColor: '#2dd4bf',
-        tabBarInactiveTintColor: '#64748b',
+        tabBarStyle: {
+          backgroundColor: isDark ? tscTheme.tabBar.dark : tscTheme.tabBar.light,
+          borderTopColor: isDark ? tscTheme.tabBarBorder.dark : tscTheme.tabBarBorder.light,
+        },
+        tabBarActiveTintColor: isDark ? tscTheme.primaryMuted.dark : tscTheme.primaryMuted.light,
+        tabBarInactiveTintColor: tscTheme.textMuted.light,
       }}
     >
       <Tabs.Screen

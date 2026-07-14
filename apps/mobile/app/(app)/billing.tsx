@@ -1,9 +1,9 @@
-import { ScrollView, Text, View, Linking } from 'react-native'
+import { ScrollView, View, Linking } from 'react-native'
 import { router } from 'expo-router'
 import { openCustomerPortal, startPlanCheckout } from '@tscopier/shared'
 import { useAuth } from '@/context/AuthContext'
 import { getBillingReturnUrl } from '@/lib/linking'
-import { Button, Card, Screen, Subtitle, Title } from '@/components/ui'
+import { BodyText, Button, Card, Screen, Subtitle, Title } from '@/components/ui'
 
 export default function BillingScreen() {
   const { session } = useAuth()
@@ -33,7 +33,7 @@ export default function BillingScreen() {
         <Subtitle>Manage your TScopier subscription</Subtitle>
 
         <Card>
-          <Text className="mb-3 text-neutral-300">Choose a plan to unlock full copier features.</Text>
+          <BodyText className="mb-3">Choose a plan to unlock full copier features.</BodyText>
           <View className="gap-2">
             <Button label="Basic plan" onPress={() => void openCheckout('basic')} />
             <Button label="Advanced plan" variant="secondary" onPress={() => void openCheckout('advanced')} />
@@ -41,7 +41,7 @@ export default function BillingScreen() {
         </Card>
 
         <Card>
-          <Text className="mb-3 text-neutral-300">Update payment method, invoices, or cancel via Stripe.</Text>
+          <BodyText className="mb-3">Update payment method, invoices, or cancel via Stripe.</BodyText>
           <Button label="Open billing portal" variant="secondary" onPress={() => void openPortal()} />
         </Card>
 

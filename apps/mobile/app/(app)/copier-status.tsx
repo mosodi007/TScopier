@@ -5,7 +5,19 @@ import { whenRealtimeReady } from '@tscopier/shared'
 import type { BrokerAccount } from '@tscopier/shared'
 import { useAuth } from '@/context/AuthContext'
 import { supabase } from '@/lib/supabase'
-import { Button, Card, Screen, Subtitle, Title } from '@/components/ui'
+import {
+  BodyText,
+  Button,
+  Card,
+  HeadingText,
+  LabelText,
+  MutedText,
+  Screen,
+  Subtitle,
+  Title,
+  ValueText,
+} from '@/components/ui'
+import { tscTheme } from '@/lib/tscTheme'
 
 interface TelegramChannelRow {
   id: string
@@ -59,44 +71,46 @@ export default function CopierStatusScreen() {
   return (
     <Screen>
       <ScrollView
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#14b8a6" />}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={tscTheme.primary} />
+        }
         contentContainerClassName="gap-4 pb-24"
       >
         <Title>Copier status</Title>
         <Subtitle>Telegram listener and channel configuration</Subtitle>
 
         <Card>
-          <Text className="text-sm text-neutral-400">Telegram listener</Text>
-          <Text className={`mt-1 text-lg ${listenerLive ? 'text-teal-400' : 'text-amber-400'}`}>
+          <LabelText>Telegram listener</LabelText>
+          <Text className={`mt-1 text-lg ${listenerLive ? 'text-teal-600 dark:text-teal-400' : 'text-amber-600 dark:text-amber-400'}`}>
             {listenerLive ? 'Live' : 'Not connected'}
           </Text>
         </Card>
 
         <Card>
-          <Text className="mb-2 font-semibold text-white">Channels ({channels.length})</Text>
+          <HeadingText className="mb-2">Channels ({channels.length})</HeadingText>
           {channels.length === 0 ? (
-            <Text className="text-neutral-400">No channels linked yet.</Text>
+            <MutedText>No channels linked yet.</MutedText>
           ) : (
             channels.map(ch => (
-              <View key={ch.id} className="mb-2 border-b border-neutral-800 pb-2">
-                <Text className="text-white">{ch.display_name ?? ch.id}</Text>
-                <Text className="text-xs text-neutral-500">
+              <View key={ch.id} className="mb-2 border-b border-neutral-200 pb-2 dark:border-neutral-800">
+                <ValueText>{ch.display_name ?? ch.id}</ValueText>
+                <MutedText className="text-xs">
                   {ch.is_active ? 'Active' : 'Inactive'}
                   {ch.last_live_at ? ` · last live ${new Date(ch.last_live_at).toLocaleString()}` : ''}
-                </Text>
+                </MutedText>
               </View>
             ))
           )}
         </Card>
 
         <Card>
-          <Text className="mb-2 font-semibold text-white">Broker channel links</Text>
+          <HeadingText className="mb-2">Broker channel links</HeadingText>
           {brokers.map(b => (
             <View key={b.id} className="mb-2">
-              <Text className="text-white">{b.label}</Text>
-              <Text className="text-xs text-neutral-500">
+              <ValueText>{b.label}</ValueText>
+              <MutedText className="text-xs">
                 {(b.signal_channel_ids ?? []).length} channel(s) selected
-              </Text>
+              </MutedText>
             </View>
           ))}
         </Card>

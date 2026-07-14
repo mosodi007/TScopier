@@ -1,13 +1,28 @@
-import { ScrollView, Text, View, Linking } from 'react-native'
+import { ScrollView, View, Linking } from 'react-native'
 import Constants from 'expo-constants'
 import { router } from 'expo-router'
 import { useAuth } from '@/context/AuthContext'
 import { useSubscription } from '@/context/SubscriptionContext'
-import { Button, Card, Screen, Subtitle, Title } from '@/components/ui'
+import { useTheme } from '@/context/ThemeContext'
+import { ThemeOption } from '@/components/ThemeToggle'
+import {
+  AccentText,
+  BodyText,
+  Button,
+  Card,
+  HeadingText,
+  LabelText,
+  MutedText,
+  Screen,
+  Subtitle,
+  Title,
+  ValueText,
+} from '@/components/ui'
 
 export default function SettingsScreen() {
   const { user, signOut } = useAuth()
   const { subscription, hasActiveSubscription } = useSubscription()
+  const { theme, setTheme } = useTheme()
   const extra = Constants.expoConfig?.extra as {
     privacyPolicyUrl?: string
     termsUrl?: string
@@ -21,17 +36,25 @@ export default function SettingsScreen() {
         <Subtitle>{user?.email}</Subtitle>
 
         <Card>
-          <Text className="text-sm text-neutral-400">Subscription</Text>
-          <Text className="mt-1 text-lg text-white">
+          <HeadingText className="mb-3">Appearance</HeadingText>
+          <View className="flex-row gap-2">
+            <ThemeOption label="Light" selected={theme === 'light'} onPress={() => setTheme('light')} />
+            <ThemeOption label="Dark" selected={theme === 'dark'} onPress={() => setTheme('dark')} />
+          </View>
+        </Card>
+
+        <Card>
+          <LabelText>Subscription</LabelText>
+          <ValueText className="mt-1 text-lg">
             {hasActiveSubscription ? `${subscription?.plan ?? 'active'} plan` : 'No active subscription'}
-          </Text>
+          </ValueText>
           <View className="mt-3">
             <Button label="Manage billing" variant="secondary" onPress={() => router.push('/(app)/billing')} />
           </View>
         </Card>
 
         <Card>
-          <Text className="mb-2 font-semibold text-white">Setup</Text>
+          <HeadingText className="mb-2">Setup</HeadingText>
           <View className="gap-2">
             <Button label="Connect broker" variant="secondary" onPress={() => router.push('/(app)/broker-connect')} />
             <Button label="Link Telegram" variant="secondary" onPress={() => router.push('/(app)/telegram-link')} />
@@ -41,16 +64,16 @@ export default function SettingsScreen() {
         </Card>
 
         <Card>
-          <Text className="mb-2 font-semibold text-white">Legal</Text>
+          <HeadingText className="mb-2">Legal</HeadingText>
           <View className="gap-2">
             {extra?.termsUrl ? (
-              <Text className="text-teal-400" onPress={() => Linking.openURL(extra.termsUrl!)}>Terms of Service</Text>
+              <AccentText onPress={() => Linking.openURL(extra.termsUrl!)}>Terms of Service</AccentText>
             ) : null}
             {extra?.privacyPolicyUrl ? (
-              <Text className="text-teal-400" onPress={() => Linking.openURL(extra.privacyPolicyUrl!)}>Privacy Policy</Text>
+              <AccentText onPress={() => Linking.openURL(extra.privacyPolicyUrl!)}>Privacy Policy</AccentText>
             ) : null}
             {extra?.riskDisclaimerUrl ? (
-              <Text className="text-teal-400" onPress={() => Linking.openURL(extra.riskDisclaimerUrl!)}>Risk Disclaimer</Text>
+              <AccentText onPress={() => Linking.openURL(extra.riskDisclaimerUrl!)}>Risk Disclaimer</AccentText>
             ) : null}
           </View>
         </Card>

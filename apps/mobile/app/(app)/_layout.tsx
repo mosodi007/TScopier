@@ -1,14 +1,17 @@
 import { Redirect, Stack } from 'expo-router'
 import { ActivityIndicator, View } from 'react-native'
 import { useAuth } from '@/context/AuthContext'
+import { useTheme } from '@/context/ThemeContext'
+import { pageBackground, tscTheme } from '@/lib/tscTheme'
 
 export default function AppLayout() {
   const { user, loading } = useAuth()
+  const { isDark } = useTheme()
 
   if (loading) {
     return (
-      <View className="flex-1 items-center justify-center bg-neutral-950">
-        <ActivityIndicator color="#14b8a6" size="large" />
+      <View className="flex-1 items-center justify-center bg-neutral-50 dark:bg-neutral-950">
+        <ActivityIndicator color={tscTheme.primary} size="large" />
       </View>
     )
   }
@@ -18,7 +21,12 @@ export default function AppLayout() {
   }
 
   return (
-    <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: '#020617' } }}>
+    <Stack
+      screenOptions={{
+        headerShown: false,
+        contentStyle: { backgroundColor: pageBackground(isDark) },
+      }}
+    >
       <Stack.Screen name="(tabs)" />
       <Stack.Screen name="broker-connect" options={{ presentation: 'modal', title: 'Connect broker' }} />
       <Stack.Screen name="telegram-link" options={{ presentation: 'modal', title: 'Link Telegram' }} />

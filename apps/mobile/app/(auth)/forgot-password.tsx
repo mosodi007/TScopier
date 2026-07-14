@@ -1,9 +1,10 @@
 import { useState } from 'react'
-import { ScrollView, Text, View } from 'react-native'
+import { ScrollView, View } from 'react-native'
 import { router } from 'expo-router'
 import { sendPasswordResetEmail } from '@tscopier/shared'
 import { makeDeepLink } from '@/lib/linking'
-import { Button, ErrorText, Field, Screen, Subtitle, Title } from '@/components/ui'
+import { ThemeToggle } from '@/components/ThemeToggle'
+import { AccentText, BodyText, Button, ErrorText, Field, Screen, Subtitle, Title } from '@/components/ui'
 
 export default function ForgotPasswordScreen() {
   const [email, setEmail] = useState('')
@@ -28,12 +29,15 @@ export default function ForgotPasswordScreen() {
 
   return (
     <Screen className="justify-center">
+      <View className="absolute right-4 top-4 z-10">
+        <ThemeToggle />
+      </View>
       <ScrollView contentContainerClassName="flex-grow justify-center pb-8">
         <Title>Reset password</Title>
         <Subtitle>We will email you a secure reset link</Subtitle>
         <View className="mt-8">
           {sent ? (
-            <Text className="text-neutral-200">Check your inbox for a reset link.</Text>
+            <BodyText>Check your inbox for a reset link.</BodyText>
           ) : (
             <>
               <Field label="Email" autoCapitalize="none" keyboardType="email-address" value={email} onChangeText={setEmail} />
@@ -42,7 +46,7 @@ export default function ForgotPasswordScreen() {
             </>
           )}
           <View className="mt-6">
-            <Text className="text-teal-400" onPress={() => router.back()}>Back to sign in</Text>
+            <AccentText onPress={() => router.back()}>Back to sign in</AccentText>
           </View>
         </View>
       </ScrollView>

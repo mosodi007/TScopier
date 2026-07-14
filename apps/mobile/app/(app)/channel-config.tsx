@@ -4,7 +4,8 @@ import { router } from 'expo-router'
 import type { BrokerAccount } from '@tscopier/shared'
 import { useAuth } from '@/context/AuthContext'
 import { supabase } from '@/lib/supabase'
-import { Button, Card, Screen, Subtitle, Title } from '@/components/ui'
+import { AccentText, Button, Card, HeadingText, Screen, Subtitle, Title } from '@/components/ui'
+import { cn } from '@/lib/cn'
 
 interface ChannelRow {
   id: string
@@ -69,6 +70,11 @@ export default function ChannelConfigScreen() {
     void load()
   }
 
+  const selectionClass = (selected: boolean) =>
+    cn(
+      selected ? 'text-teal-600 dark:text-teal-400' : 'text-neutral-600 dark:text-neutral-400',
+    )
+
   return (
     <Screen>
       <ScrollView contentContainerClassName="gap-4 pb-24">
@@ -76,28 +82,26 @@ export default function ChannelConfigScreen() {
         <Subtitle>Select which signal channels each broker copies</Subtitle>
 
         <Card>
-          <Text className="mb-2 font-semibold text-white">Broker</Text>
+          <HeadingText className="mb-2">Broker</HeadingText>
           {brokers.map(b => (
             <Pressable key={b.id} onPress={() => setSelectedBrokerId(b.id)} className="mb-2 py-2">
-              <Text className={selectedBrokerId === b.id ? 'text-teal-400' : 'text-neutral-300'}>
-                {b.label}
-              </Text>
+              <Text className={selectionClass(selectedBrokerId === b.id)}>{b.label}</Text>
             </Pressable>
           ))}
         </Card>
 
         {selectedBrokerId ? (
           <Card>
-            <Text className="mb-2 font-semibold text-white">Channels</Text>
+            <HeadingText className="mb-2">Channels</HeadingText>
             {channels.map(ch => (
               <Pressable key={ch.id} onPress={() => toggleChannel(ch.id)} className="mb-2 py-2">
-                <Text className={selectedChannelIds.has(ch.id) ? 'text-teal-400' : 'text-neutral-400'}>
+                <Text className={selectionClass(selectedChannelIds.has(ch.id))}>
                   {selectedChannelIds.has(ch.id) ? '✓ ' : '○ '}{ch.display_name ?? ch.id}
                 </Text>
               </Pressable>
             ))}
             <Button label="Save channels" loading={saving} onPress={save} />
-            {message ? <Text className="mt-2 text-sm text-teal-400">{message}</Text> : null}
+            {message ? <AccentText className="mt-2 text-sm">{message}</AccentText> : null}
           </Card>
         ) : null}
 

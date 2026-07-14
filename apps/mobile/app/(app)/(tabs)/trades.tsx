@@ -1,7 +1,17 @@
 import { FlatList, RefreshControl, Text, View } from 'react-native'
 import { useAuth } from '@/context/AuthContext'
 import { useTradesData } from '@/hooks/useTradesData'
-import { Card, Screen, Subtitle, Title } from '@/components/ui'
+import {
+  BodyText,
+  Card,
+  HeadingText,
+  MutedText,
+  Screen,
+  Subtitle,
+  Title,
+  pnlTextClass,
+} from '@/components/ui'
+import { tscTheme } from '@/lib/tscTheme'
 
 export default function TradesScreen() {
   const { user } = useAuth()
@@ -11,32 +21,32 @@ export default function TradesScreen() {
     <Screen>
       <Title>Trades</Title>
       <Subtitle>Recent copied trades from your brokers</Subtitle>
-      {error ? <Text className="mt-2 text-red-400">{error}</Text> : null}
+      {error ? <Text className="mt-2 text-error-600">{error}</Text> : null}
       <FlatList
         className="mt-4"
         data={trades}
         keyExtractor={item => item.id}
-        refreshControl={<RefreshControl refreshing={loading} onRefresh={refresh} tintColor="#14b8a6" />}
+        refreshControl={
+          <RefreshControl refreshing={loading} onRefresh={refresh} tintColor={tscTheme.primary} />
+        }
         contentContainerClassName="gap-3 pb-24"
         ListEmptyComponent={
           !loading ? (
             <Card>
-              <Text className="text-neutral-300">No trades yet.</Text>
+              <BodyText>No trades yet.</BodyText>
             </Card>
           ) : null
         }
         renderItem={({ item }) => (
           <Card>
             <View className="flex-row items-center justify-between">
-              <Text className="text-lg font-semibold text-white">{item.symbol ?? '—'}</Text>
-              <Text className={item.profit != null && item.profit >= 0 ? 'text-teal-400' : 'text-red-400'}>
-                {item.profit != null ? item.profit.toFixed(2) : '—'}
-              </Text>
+              <HeadingText className="text-lg">{item.symbol ?? '—'}</HeadingText>
+              <Text className={pnlTextClass(item.profit)}>{item.profit != null ? item.profit.toFixed(2) : '—'}</Text>
             </View>
-            <Text className="mt-1 text-sm capitalize text-neutral-400">
+            <MutedText className="mt-1 text-sm capitalize">
               {item.side ?? '—'} · {item.status ?? 'open'}
-            </Text>
-            <Text className="mt-1 text-xs text-neutral-500">{item.open_time ?? '—'}</Text>
+            </MutedText>
+            <MutedText className="mt-1 text-xs">{item.open_time ?? '—'}</MutedText>
           </Card>
         )}
       />

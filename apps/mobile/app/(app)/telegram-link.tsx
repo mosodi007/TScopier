@@ -1,9 +1,9 @@
 import { useState } from 'react'
-import { ScrollView, Text, View } from 'react-native'
+import { ScrollView, View } from 'react-native'
 import { router } from 'expo-router'
 import { getSupabaseUrl, callTelegramAuth } from '@tscopier/shared'
 import { useAuth } from '@/context/AuthContext'
-import { Button, Card, ErrorText, Field, Screen, Subtitle, Title } from '@/components/ui'
+import { AccentText, BodyText, Button, Card, ErrorText, Field, Screen, Subtitle, Title } from '@/components/ui'
 
 export default function TelegramLinkScreen() {
   const { session } = useAuth()
@@ -92,13 +92,13 @@ export default function TelegramLinkScreen() {
             <Button label="Use QR login instead" variant="secondary" loading={loading} onPress={startQr} />
           </View>
           <ErrorText>{error}</ErrorText>
-          {message ? <Text className="mb-3 text-teal-400">{message}</Text> : null}
+          {message ? <AccentText className="mb-3">{message}</AccentText> : null}
           <Button label="Close" variant="secondary" onPress={() => router.back()} />
         </View>
         <Card className="mt-6">
-          <Text className="text-sm text-neutral-400">
+          <BodyText className="text-sm">
             Telegram listening runs on TScopier servers. Your phone only authorizes the session.
-          </Text>
+          </BodyText>
         </Card>
       </ScrollView>
     </Screen>

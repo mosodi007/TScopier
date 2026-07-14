@@ -6,7 +6,19 @@ import { useAuth } from '@/context/AuthContext'
 import { supabase } from '@/lib/supabase'
 import { useDashboardRealtime } from '@/hooks/useDashboardRealtime'
 import { useFxsocketStream } from '@/hooks/useFxsocketStream'
-import { Button, Card, Screen, Subtitle, Title } from '@/components/ui'
+import {
+  BodyText,
+  Button,
+  Card,
+  HeadingText,
+  LabelText,
+  MutedText,
+  Screen,
+  Subtitle,
+  Title,
+  ValueText,
+} from '@/components/ui'
+import { tscTheme } from '@/lib/tscTheme'
 
 export default function DashboardScreen() {
   const { user } = useAuth()
@@ -54,7 +66,9 @@ export default function DashboardScreen() {
   return (
     <Screen>
       <ScrollView
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#14b8a6" />}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={tscTheme.primary} />
+        }
         contentContainerClassName="pb-24"
       >
         <Title>Dashboard</Title>
@@ -72,7 +86,7 @@ export default function DashboardScreen() {
         <View className="mt-6 gap-3">
           {brokers.length === 0 ? (
             <Card>
-              <Text className="text-neutral-300">No broker accounts yet. Connect one to start copying.</Text>
+              <BodyText>No broker accounts yet. Connect one to start copying.</BodyText>
             </Card>
           ) : (
             brokers.map(broker => {
@@ -83,20 +97,20 @@ export default function DashboardScreen() {
                 broker.connection_status === 'connected' || broker.fxsocket_status === 'connected'
               return (
                 <Card key={broker.id}>
-                  <Text className="text-lg font-semibold text-white">{broker.label}</Text>
-                  <Text className="mt-1 text-sm text-neutral-400">{broker.broker_server ?? broker.platform}</Text>
+                  <HeadingText className="text-lg">{broker.label}</HeadingText>
+                  <MutedText className="mt-1 text-sm">{broker.broker_server ?? broker.platform}</MutedText>
                   <View className="mt-3 flex-row justify-between">
                     <View>
-                      <Text className="text-xs text-neutral-500">Balance</Text>
-                      <Text className="text-base text-white">{balance != null ? balance.toFixed(2) : '—'}</Text>
+                      <LabelText>Balance</LabelText>
+                      <ValueText>{balance != null ? balance.toFixed(2) : '—'}</ValueText>
                     </View>
                     <View>
-                      <Text className="text-xs text-neutral-500">Equity</Text>
-                      <Text className="text-base text-white">{equity != null ? equity.toFixed(2) : '—'}</Text>
+                      <LabelText>Equity</LabelText>
+                      <ValueText>{equity != null ? equity.toFixed(2) : '—'}</ValueText>
                     </View>
                     <View>
-                      <Text className="text-xs text-neutral-500">Status</Text>
-                      <Text className={connected ? 'text-teal-400' : 'text-amber-400'}>
+                      <LabelText>Status</LabelText>
+                      <Text className={connected ? 'text-teal-600 dark:text-teal-400' : 'text-amber-600 dark:text-amber-400'}>
                         {connected ? 'Connected' : 'Offline'}
                       </Text>
                     </View>

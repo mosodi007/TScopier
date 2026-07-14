@@ -1,7 +1,8 @@
 import { useState } from 'react'
-import { ScrollView, Text, View } from 'react-native'
+import { ScrollView, View } from 'react-native'
 import { router } from 'expo-router'
 import { supabase } from '@/lib/supabase'
+import { ThemeToggle } from '@/components/ThemeToggle'
 import { Button, ErrorText, Field, Screen, Subtitle, Title } from '@/components/ui'
 
 export default function ResetPasswordScreen() {
@@ -23,6 +24,9 @@ export default function ResetPasswordScreen() {
 
   return (
     <Screen className="justify-center">
+      <View className="absolute right-4 top-4 z-10">
+        <ThemeToggle />
+      </View>
       <ScrollView contentContainerClassName="flex-grow justify-center pb-8">
         <Title>New password</Title>
         <Subtitle>Choose a new password for your account</Subtitle>
