@@ -1,3 +1,6 @@
+import { configureWebEnv } from '@tscopier/shared'
+
+configureWebEnv()
 import { StrictMode, lazy, Suspense, useEffect } from 'react'
 import { createRoot } from 'react-dom/client'
 import './index.css'

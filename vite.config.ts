@@ -13,6 +13,7 @@ export default defineConfig({
     alias: {
       react: path.resolve(rootDir, 'node_modules/react'),
       'react-dom': path.resolve(rootDir, 'node_modules/react-dom'),
+      '@tscopier/shared': path.resolve(rootDir, 'packages/shared/src/index.ts'),
     },
   },
   build: {

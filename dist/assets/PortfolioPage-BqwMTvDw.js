@@ -1,0 +1,1 @@
+import{m as e}from"./vendor-C6YWQnIw.js";import{i as t}from"./createLucideIcon-C5GKxxHG.js";import{t as n}from"./PlaceholderPage-BDqMHjGq.js";var r=e();function i(){let e=t();return(0,r.jsx)(n,{title:e.pages.portfolio.title,description:e.pages.portfolio.description})}export{i as PortfolioPage};

@@ -8,6 +8,10 @@
     "build": "tsc -b && vite build",
     "dev:backoffice": "npm --prefix apps/backoffice run dev",
     "build:backoffice": "npm --prefix apps/backoffice run build",
+    "dev:mobile": "npm --prefix apps/mobile run start",
+    "build:mobile": "npm --prefix apps/mobile run build",
+    "dev:mobile": "npm --prefix apps/mobile run start",
+    "build:mobile": "npm --prefix apps/mobile run build",
     "dev:docs": "npm --prefix apps/docs run dev",
     "build:docs": "npm --prefix apps/docs run build",
     "lint": "eslint .",
@@ -18,11 +22,13 @@
     "test:account-type": "node --import tsx --import ./test/preload.ts --test src/lib/brokerFromServer.test.ts src/lib/brokerHealth.test.ts",
     "test:worker": "npm --prefix worker test",
     "deploy:function": "bash scripts/deploy-edge-function.sh",
-    "upload:email-assets": "bash scripts/upload-email-assets.sh"
+    "upload:email-assets": "bash scripts/upload-email-assets.sh",
+    "typecheck:mobile": "npm --prefix apps/mobile run typecheck"
   },
   "dependencies": {
     "@livechat/widget-react": "^1.4.0",
     "@supabase/supabase-js": "^2.105.3",
+    "@tscopier/shared": "file:packages/shared",
     "clsx": "^2.1.1",
     "lightweight-charts": "^5.2.0",
     "lucide-react": "^1.14.0",
