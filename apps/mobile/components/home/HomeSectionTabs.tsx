@@ -50,18 +50,18 @@ export function HomeSectionTabs({ value, onChange }: HomeSectionTabsProps) {
               alignItems: 'center',
               justifyContent: 'center',
               borderRadius: 12,
-              paddingHorizontal: focused ? 10 : 6,
+              paddingHorizontal: 8,
               paddingVertical: 7,
               backgroundColor: focused ? highlightColor : 'transparent',
             }}
           >
-            <Icon size={17} color={color} strokeWidth={focused ? 2.25 : 2} />
+            <Icon size={17} color={color} strokeWidth={2} />
             <Text
               numberOfLines={1}
               style={{
                 marginTop: 3,
                 fontSize: 10,
-                fontWeight: focused ? '700' : '600',
+                fontWeight: '600',
                 color,
               }}
             >

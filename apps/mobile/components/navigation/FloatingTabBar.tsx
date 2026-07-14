@@ -101,7 +101,7 @@ export function FloatingTabBar({ state, navigation }: BottomTabBarProps) {
                   alignItems: 'center',
                   justifyContent: 'center',
                   borderRadius: 18,
-                  paddingHorizontal: focused ? 14 : 6,
+                  paddingHorizontal: 10,
                   paddingVertical: 5,
                   width: '100%',
                   backgroundColor: focused ? highlightColor : 'transparent',
@@ -113,7 +113,7 @@ export function FloatingTabBar({ state, navigation }: BottomTabBarProps) {
                   style={{
                     marginTop: 1,
                     fontSize: 9,
-                    fontWeight: focused ? '700' : '600',
+                    fontWeight: '600',
                     color,
                   }}
                 >
