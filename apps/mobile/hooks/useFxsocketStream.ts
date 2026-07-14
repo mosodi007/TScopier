@@ -2,10 +2,16 @@ import { useEffect, useRef } from 'react'
 import { AppState, type AppStateStatus } from 'react-native'
 import type { BrokerAccount } from '@tscopier/shared'
 import { openFxsocketStream, type FxsocketStreamMessage } from '@/lib/fxsocketStream'
+import {
+  parseFxsocketAccountStreamData,
+  parseFxsocketPositionsStreamData,
+  type FxsocketAccountStreamSnapshot,
+  type FxsocketPositionsStreamSnapshot,
+} from '@/lib/fxsocketStreamParse'
 
 export interface FxsocketStreamHandlers {
-  onAccount?: (brokerAccountId: string, data: Record<string, unknown>) => void
-  onPositions?: (brokerAccountId: string, data: unknown) => void
+  onAccount?: (brokerAccountId: string, data: FxsocketAccountStreamSnapshot) => void
+  onPositions?: (brokerAccountId: string, data: FxsocketPositionsStreamSnapshot) => void
 }
 
 function isLinkedBroker(b: BrokerAccount): boolean {
@@ -35,9 +41,11 @@ export function useFxsocketStream(
       void openFxsocketStream(brokerId, {
         onMessage: (msg: FxsocketStreamMessage) => {
           if (msg.type === 'account' && msg.data) {
-            handlersRef.current.onAccount?.(brokerId, msg.data as Record<string, unknown>)
-          } else if (msg.type === 'positions' && msg.data) {
-            handlersRef.current.onPositions?.(brokerId, msg.data)
+            const snap = parseFxsocketAccountStreamData(msg.data as Record<string, unknown>)
+            handlersRef.current.onAccount?.(brokerId, snap)
+          } else if (msg.type === 'positions' && msg.data != null) {
+            const snap = parseFxsocketPositionsStreamData(msg.data)
+            handlersRef.current.onPositions?.(brokerId, snap)
           }
         },
       }).then(handle => {
