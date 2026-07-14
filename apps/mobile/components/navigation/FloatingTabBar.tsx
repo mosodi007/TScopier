@@ -2,7 +2,9 @@ import { Platform, Pressable, Text, View } from 'react-native'
 import type { BottomTabBarProps } from 'expo-router/build/react-navigation/bottom-tabs/types'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useTheme } from '@/context/ThemeContext'
+import { SlidingTabHighlight } from '@/components/navigation/SlidingTabHighlight'
 import { TabBarNavIcon } from '@/components/navigation/TabBarNavIcon'
+import { useSlidingTabHighlight } from '@/components/navigation/useSlidingTabHighlight'
 import { TAB_NAV_META, TAB_SCREEN_ORDER } from '@/lib/navigation'
 import { tscTheme } from '@/lib/tscTheme'
 
@@ -20,6 +22,13 @@ export function FloatingTabBar({ state, navigation }: BottomTabBarProps) {
   const highlightColor = isDark ? 'rgba(4, 47, 46, 0.55)' : '#f0fdfa'
 
   const visibleRoutes = state.routes.filter(route => TAB_ORDER.has(route.name))
+  const activeVisibleIndex = visibleRoutes.findIndex(route => {
+    const routeIndex = state.routes.findIndex(r => r.key === route.key)
+    return state.index === routeIndex
+  })
+  const { highlightStyle, onTabLayout } = useSlidingTabHighlight(
+    activeVisibleIndex >= 0 ? activeVisibleIndex : 0,
+  )
 
   return (
     <View
@@ -35,6 +44,7 @@ export function FloatingTabBar({ state, navigation }: BottomTabBarProps) {
     >
       <View
         style={{
+          position: 'relative',
           flexDirection: 'row',
           alignItems: 'center',
           justifyContent: 'space-between',
@@ -55,7 +65,8 @@ export function FloatingTabBar({ state, navigation }: BottomTabBarProps) {
             : { elevation: 14 }),
         }}
       >
-        {visibleRoutes.map(route => {
+        <SlidingTabHighlight color={highlightColor} borderRadius={18} style={highlightStyle} />
+        {visibleRoutes.map((route, index) => {
           const routeIndex = state.routes.findIndex(r => r.key === route.key)
           const focused = state.index === routeIndex
           const meta = TAB_NAV_META[route.name as keyof typeof TAB_NAV_META]
@@ -67,6 +78,7 @@ export function FloatingTabBar({ state, navigation }: BottomTabBarProps) {
           return (
             <Pressable
               key={route.key}
+              onLayout={onTabLayout(index)}
               accessibilityRole="button"
               accessibilityState={focused ? { selected: true } : {}}
               accessibilityLabel={meta.label}
@@ -104,7 +116,6 @@ export function FloatingTabBar({ state, navigation }: BottomTabBarProps) {
                   paddingHorizontal: 10,
                   paddingVertical: 5,
                   width: '100%',
-                  backgroundColor: focused ? highlightColor : 'transparent',
                 }}
               >
                 <TabBarNavIcon icon={Icon} color={color} size={20} />

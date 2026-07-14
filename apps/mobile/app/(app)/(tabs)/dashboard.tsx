@@ -62,15 +62,8 @@ export default function DashboardScreen() {
       ? `Across ${brokers.filter(b => (liveByBroker[b.id]?.openTrades ?? 0) > 0).length || brokers.length} account(s)`
       : 'No open positions'
 
-  const subtitle =
-    homeTab === 'dashboard'
-      ? 'Portfolio overview and linked accounts'
-      : homeTab === 'brokers'
-        ? 'Linked trading accounts and connection status'
-        : 'Telegram channels and copier engine'
-
   return (
-    <AppScreen title={<TscopierLogo />} subtitle={subtitle}>
+    <AppScreen title={<TscopierLogo />}>
       <ScrollView
         refreshControl={
           homeTab === 'dashboard' ? (

@@ -1,6 +1,8 @@
 import { Pressable, Text, View } from 'react-native'
 import { Landmark, LayoutDashboard, Radio, type LucideIcon } from 'lucide-react-native'
 import { useTheme } from '@/context/ThemeContext'
+import { SlidingTabHighlight } from '@/components/navigation/SlidingTabHighlight'
+import { useSlidingTabHighlight } from '@/components/navigation/useSlidingTabHighlight'
 import { tscTheme } from '@/lib/tscTheme'
 
 export type HomeSectionTab = 'dashboard' | 'brokers' | 'channels'
@@ -23,10 +25,13 @@ export function HomeSectionTabs({ value, onChange }: HomeSectionTabsProps) {
   const surfaceColor = isDark ? tscTheme.surface.dark : '#ffffff'
   const borderColor = isDark ? 'rgba(148, 163, 184, 0.18)' : 'rgba(226, 232, 240, 0.95)'
   const highlightColor = isDark ? 'rgba(4, 47, 46, 0.55)' : '#f0fdfa'
+  const activeIndex = TABS.findIndex(tab => tab.id === value)
+  const { highlightStyle, onTabLayout } = useSlidingTabHighlight(activeIndex >= 0 ? activeIndex : 0)
 
   return (
     <View
       style={{
+        position: 'relative',
         flexDirection: 'row',
         gap: 4,
         borderRadius: 16,
@@ -36,7 +41,8 @@ export function HomeSectionTabs({ value, onChange }: HomeSectionTabsProps) {
         padding: 4,
       }}
     >
-      {TABS.map(tab => {
+      <SlidingTabHighlight color={highlightColor} borderRadius={12} style={highlightStyle} />
+      {TABS.map((tab, index) => {
         const focused = value === tab.id
         const color = focused ? activeColor : inactiveColor
         const Icon = tab.icon
@@ -44,6 +50,7 @@ export function HomeSectionTabs({ value, onChange }: HomeSectionTabsProps) {
         return (
           <Pressable
             key={tab.id}
+            onLayout={onTabLayout(index)}
             onPress={() => onChange(tab.id)}
             style={{
               flex: 1,
@@ -52,7 +59,6 @@ export function HomeSectionTabs({ value, onChange }: HomeSectionTabsProps) {
               borderRadius: 12,
               paddingHorizontal: 8,
               paddingVertical: 7,
-              backgroundColor: focused ? highlightColor : 'transparent',
             }}
           >
             <Icon size={17} color={color} strokeWidth={2} />
