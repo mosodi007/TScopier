@@ -5,6 +5,13 @@ import * as SplashScreen from 'expo-splash-screen'
 import { useEffect } from 'react'
 import { StatusBar } from 'expo-status-bar'
 import { SafeAreaProvider } from 'react-native-safe-area-context'
+import {
+  InstrumentSans_400Regular,
+  InstrumentSans_500Medium,
+  InstrumentSans_600SemiBold,
+  InstrumentSans_700Bold,
+  useFonts,
+} from '@expo-google-fonts/instrument-sans'
 import { AuthProvider } from '@/context/AuthContext'
 import { SubscriptionProvider } from '@/context/SubscriptionContext'
 import { NotificationsProvider } from '@/context/NotificationsContext'
@@ -12,6 +19,7 @@ import { ThemeProvider, useTheme } from '@/context/ThemeContext'
 import { useAuthDeepLink } from '@/hooks/useAuthDeepLink'
 import { usePushNotifications } from '@/hooks/usePushNotifications'
 import { pageBackground } from '@/lib/tscTheme'
+import { applyDefaultAppFont } from '@/lib/setupDefaultFont'
 
 SplashScreen.preventAutoHideAsync()
 
@@ -40,9 +48,25 @@ function RootNavigation() {
 }
 
 export default function RootLayout() {
+  const [fontsLoaded, fontError] = useFonts({
+    InstrumentSans_400Regular,
+    InstrumentSans_500Medium,
+    InstrumentSans_600SemiBold,
+    InstrumentSans_700Bold,
+  })
+
   useEffect(() => {
-    SplashScreen.hideAsync()
-  }, [])
+    if (fontsLoaded) {
+      applyDefaultAppFont()
+    }
+    if (fontsLoaded || fontError) {
+      SplashScreen.hideAsync()
+    }
+  }, [fontsLoaded, fontError])
+
+  if (!fontsLoaded && !fontError) {
+    return null
+  }
 
   return (
     <SafeAreaProvider>

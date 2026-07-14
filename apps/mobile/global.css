@@ -21,3 +21,9 @@
     --tsc-text-muted: #94a3b8;
   }
 }
+
+@layer utilities {
+  .font-sans {
+    font-family: InstrumentSans_400Regular;
+  }
+}

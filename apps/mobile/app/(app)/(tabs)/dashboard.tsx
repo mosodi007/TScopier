@@ -2,9 +2,18 @@ import { RefreshControl, ScrollView, View, Text, ActivityIndicator } from 'react
 import { router } from 'expo-router'
 import { useAuth } from '@/context/AuthContext'
 import { useDashboardMetrics } from '@/hooks/useDashboardMetrics'
+import { useDashboardExtras } from '@/hooks/useDashboardExtras'
 import { LinkedAccountCard } from '@/components/dashboard/LinkedAccountCard'
 import { OverviewStat, StatBlock } from '@/components/dashboard/StatBlock'
-import { Button, Card, HeadingText, Screen, Subtitle, Title, pnlTextClass } from '@/components/ui'
+import { DashboardPanel } from '@/components/dashboard/DashboardPanel'
+import { DashboardChartPlaceholder } from '@/components/dashboard/DashboardChartPlaceholder'
+import {
+  formatActionLabel,
+  formatShortTime,
+  StatusBadge,
+} from '@/components/dashboard/logDisplay'
+import { AppScreen } from '@/components/layout/AppScreen'
+import { Button, Card, HeadingText, pnlTextClass, MutedText } from '@/components/ui'
 import { formatMoney, formatSignedMoney, formatVsYesterdayDelta } from '@/lib/formatMoney'
 import { tscTheme } from '@/lib/tscTheme'
 
@@ -22,6 +31,11 @@ export default function DashboardScreen() {
     refreshing,
     refresh,
   } = useDashboardMetrics(user?.id)
+  const { copierLogs, activities, refreshExtras } = useDashboardExtras(user?.id)
+
+  const onRefresh = async () => {
+    await Promise.all([refresh(), refreshExtras()])
+  }
 
   const tradesSub =
     todaySummary.taken === 0
@@ -36,18 +50,14 @@ export default function DashboardScreen() {
       : 'No open positions'
 
   return (
-    <Screen>
+    <AppScreen title="Dashboard" subtitle="Portfolio overview and linked accounts">
       <ScrollView
         refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={() => void refresh()} tintColor={tscTheme.primary} />
+          <RefreshControl refreshing={refreshing} onRefresh={() => void onRefresh()} tintColor={tscTheme.primary} />
         }
         contentContainerClassName="gap-4 pb-24"
+        showsVerticalScrollIndicator={false}
       >
-        <View>
-          <Title>Dashboard</Title>
-          <Subtitle>Portfolio overview and linked accounts</Subtitle>
-        </View>
-
         {loading && brokers.length === 0 ? (
           <View className="items-center py-16">
             <ActivityIndicator color={tscTheme.primary} size="large" />
@@ -111,9 +121,60 @@ export default function DashboardScreen() {
               </View>
             </Card>
 
+            <DashboardChartPlaceholder
+              title="Trade volume (7 days)"
+              subtitle="Chart preview — open web dashboard for full analytics."
+            />
+            <DashboardChartPlaceholder
+              title="Channel profit (7 days)"
+              subtitle="Per-channel performance summary on web."
+            />
+
+            <DashboardPanel
+              title="Trade activities"
+              onViewAll={() => router.push('/(app)/activities')}
+              isEmpty={activities.length === 0}
+              emptyMessage="No trade activities yet."
+            >
+              <View className="divide-y divide-neutral-100 dark:divide-neutral-800">
+                {activities.map(row => (
+                  <View key={row.id} className="gap-1 px-4 py-3">
+                    <View className="flex-row items-center justify-between gap-2">
+                      <Text className="flex-1 text-sm font-medium text-neutral-900 dark:text-neutral-50" numberOfLines={1}>
+                        {formatActionLabel(row.action)}
+                      </Text>
+                      <StatusBadge status={row.status} />
+                    </View>
+                    <MutedText className="text-xs">{formatShortTime(row.created_at)}</MutedText>
+                  </View>
+                ))}
+              </View>
+            </DashboardPanel>
+
+            <DashboardPanel
+              title="Copier logs"
+              onViewAll={() => router.push('/(app)/copier-logs')}
+              isEmpty={copierLogs.length === 0}
+              emptyMessage="No copier logs yet."
+            >
+              <View className="divide-y divide-neutral-100 dark:divide-neutral-800">
+                {copierLogs.map(row => (
+                  <View key={row.id} className="gap-1 px-4 py-3">
+                    <View className="flex-row items-center justify-between gap-2">
+                      <StatusBadge status={row.status ?? 'pending'} />
+                      <MutedText className="text-xs">{formatShortTime(row.created_at)}</MutedText>
+                    </View>
+                    <Text className="text-sm text-neutral-900 dark:text-neutral-50" numberOfLines={1}>
+                      {row.channel_name ?? '—'} · {row.symbol ?? '—'} · {(row.action ?? '—').toUpperCase()}
+                    </Text>
+                  </View>
+                ))}
+              </View>
+            </DashboardPanel>
+
             <View className="flex-row gap-2">
               <Button
-                label="Copier"
+                label="Channels"
                 variant="secondary"
                 className="flex-1"
                 onPress={() => router.push('/(app)/copier-status')}
@@ -151,7 +212,7 @@ export default function DashboardScreen() {
                       key={broker.id}
                       broker={broker}
                       live={liveByBroker[broker.id]}
-                      onPress={() => router.push('/(app)/(tabs)/settings')}
+                      onPress={() => router.push('/(app)/(tabs)/brokers')}
                     />
                   ))}
                 </View>
@@ -160,6 +221,6 @@ export default function DashboardScreen() {
           </>
         )}
       </ScrollView>
-    </Screen>
+    </AppScreen>
   )
 }

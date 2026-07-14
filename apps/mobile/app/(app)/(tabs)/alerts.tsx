@@ -1,30 +1,27 @@
 import { FlatList, Pressable, View } from 'react-native'
 import { useNotifications } from '@/context/NotificationsContext'
+import { AppScreen } from '@/components/layout/AppScreen'
 import {
   BodyText,
   Button,
   Card,
   HeadingText,
   MutedText,
-  Screen,
-  Subtitle,
-  Title,
 } from '@/components/ui'
 
 export default function AlertsScreen() {
   const { notifications, markRead, markAllRead, unreadCount } = useNotifications()
 
   return (
-    <Screen>
-      <View className="flex-row items-center justify-between">
-        <View>
-          <Title>Alerts</Title>
-          <Subtitle>{unreadCount} unread notifications</Subtitle>
-        </View>
-        {notifications.length > 0 ? (
+    <AppScreen
+      title="Alerts"
+      subtitle={`${unreadCount} unread notification${unreadCount === 1 ? '' : 's'}`}
+    >
+      {notifications.length > 0 ? (
+        <View className="mt-2 flex-row justify-end">
           <Button label="Mark all read" variant="secondary" onPress={markAllRead} className="px-3 py-2" />
-        ) : null}
-      </View>
+        </View>
+      ) : null}
 
       <FlatList
         className="mt-4"
@@ -46,6 +43,6 @@ export default function AlertsScreen() {
           </Pressable>
         )}
       />
-    </Screen>
+    </AppScreen>
   )
 }

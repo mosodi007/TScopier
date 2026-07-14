@@ -15,7 +15,7 @@ export function Screen({ children, className }: { children: React.ReactNode; cla
   return (
     <SafeAreaView
       edges={['top', 'left', 'right']}
-      className={cn('flex-1 bg-neutral-50 px-4 dark:bg-neutral-950', className)}
+      className={cn('flex-1 bg-neutral-50 px-4 font-sans dark:bg-neutral-950', className)}
     >
       {children}
     </SafeAreaView>
@@ -37,7 +37,7 @@ export function Card({ children, className }: { children: React.ReactNode; class
 
 export function Title({ children, className }: { children: React.ReactNode; className?: string }) {
   return (
-    <Text className={cn('text-2xl font-semibold text-neutral-900 dark:text-neutral-50', className)}>
+    <Text className={cn('text-2xl font-semibold text-neutral-900 dark:text-neutral-50 font-sans', className)}>
       {children}
     </Text>
   )
@@ -45,7 +45,7 @@ export function Title({ children, className }: { children: React.ReactNode; clas
 
 export function Subtitle({ children, className }: { children: React.ReactNode; className?: string }) {
   return (
-    <Text className={cn('mt-1 text-sm text-neutral-500 dark:text-neutral-400', className)}>
+    <Text className={cn('mt-1 text-sm text-neutral-500 dark:text-neutral-400 font-sans', className)}>
       {children}
     </Text>
   )
@@ -53,7 +53,7 @@ export function Subtitle({ children, className }: { children: React.ReactNode; c
 
 export function HeadingText({ children, className }: TextProps & { className?: string }) {
   return (
-    <Text className={cn('font-semibold text-neutral-900 dark:text-neutral-50', className)}>
+    <Text className={cn('font-semibold text-neutral-900 dark:text-neutral-50 font-sans', className)}>
       {children}
     </Text>
   )
@@ -61,7 +61,7 @@ export function HeadingText({ children, className }: TextProps & { className?: s
 
 export function BodyText({ children, className }: TextProps & { className?: string }) {
   return (
-    <Text className={cn('text-neutral-700 dark:text-neutral-300', className)}>{children}</Text>
+    <Text className={cn('text-neutral-700 dark:text-neutral-300 font-sans', className)}>{children}</Text>
   )
 }
 
@@ -145,7 +145,7 @@ export function Field({
     <View className={cn('mb-4', className)}>
       <Text className="mb-1 text-sm text-neutral-600 dark:text-neutral-300">{label}</Text>
       <TextInput
-        className="rounded-xl border border-neutral-200 bg-white px-3 py-3 text-base text-neutral-900 dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-50"
+        className="rounded-xl border border-neutral-200 bg-white px-3 py-3 text-base text-neutral-900 font-sans dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-50"
         placeholderTextColor="#64748b"
         {...inputProps}
       />

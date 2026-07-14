@@ -1,14 +1,12 @@
 import { FlatList, RefreshControl, Text, View } from 'react-native'
 import { useAuth } from '@/context/AuthContext'
 import { useTradesData } from '@/hooks/useTradesData'
+import { AppScreen } from '@/components/layout/AppScreen'
 import {
   BodyText,
   Card,
   HeadingText,
   MutedText,
-  Screen,
-  Subtitle,
-  Title,
   pnlTextClass,
 } from '@/components/ui'
 import { tscTheme } from '@/lib/tscTheme'
@@ -18,9 +16,7 @@ export default function TradesScreen() {
   const { trades, loading, refresh, error } = useTradesData(user?.id)
 
   return (
-    <Screen>
-      <Title>Trades</Title>
-      <Subtitle>Recent copied trades from your brokers</Subtitle>
+    <AppScreen title="Trades" subtitle="Recent copied trades from your brokers">
       {error ? <Text className="mt-2 text-error-600">{error}</Text> : null}
       <FlatList
         className="mt-4"
@@ -50,6 +46,6 @@ export default function TradesScreen() {
           </Card>
         )}
       />
-    </Screen>
+    </AppScreen>
   )
 }

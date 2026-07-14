@@ -5,17 +5,14 @@ import { useAuth } from '@/context/AuthContext'
 import { useSubscription } from '@/context/SubscriptionContext'
 import { useTheme } from '@/context/ThemeContext'
 import { ThemeOption } from '@/components/ThemeToggle'
+import { StackScreen } from '@/components/layout/StackScreen'
 import {
   AccentText,
-  BodyText,
   Button,
   Card,
   HeadingText,
   LabelText,
   MutedText,
-  Screen,
-  Subtitle,
-  Title,
   ValueText,
 } from '@/components/ui'
 
@@ -30,11 +27,8 @@ export default function SettingsScreen() {
   } | undefined
 
   return (
-    <Screen>
-      <ScrollView contentContainerClassName="gap-4 pb-24">
-        <Title>Settings</Title>
-        <Subtitle>{user?.email}</Subtitle>
-
+    <StackScreen title="Settings" subtitle={user?.email ?? undefined}>
+      <ScrollView contentContainerClassName="mt-4 gap-4 pb-24">
         <Card>
           <HeadingText className="mb-3">Appearance</HeadingText>
           <View className="flex-row gap-2">
@@ -79,7 +73,8 @@ export default function SettingsScreen() {
         </Card>
 
         <Button label="Sign out" variant="danger" onPress={() => void signOut()} />
+        <MutedText className="text-center text-xs">Profile avatar menu also includes billing and affiliate links.</MutedText>
       </ScrollView>
-    </Screen>
+    </StackScreen>
   )
 }
