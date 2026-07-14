@@ -1,7 +1,6 @@
 import type { LucideIcon } from 'lucide-react-native'
 import {
   Activity,
-  Bell,
   BookOpen,
   CalendarDays,
   ChartNoAxesCombined,
@@ -27,7 +26,8 @@ export type MobileNavTarget =
         | '/(app)/(tabs)/dashboard'
         | '/(app)/(tabs)/brokers'
         | '/(app)/(tabs)/trades'
-        | '/(app)/(tabs)/alerts'
+        | '/(app)/(tabs)/channels'
+        | '/(app)/(tabs)/backtest'
         | '/(app)/(tabs)/more'
     }
   | { kind: 'stack'; href: string }
@@ -51,6 +51,30 @@ export interface MobileNavSection {
 /** Mirrors web sidebar sections — primary tabs excluded from More. */
 export const MOBILE_MORE_SECTIONS: MobileNavSection[] = [
   {
+    id: 'general',
+    title: 'General',
+    items: [
+      {
+        id: 'dashboard',
+        label: 'Dashboard',
+        icon: LayoutDashboard,
+        target: { kind: 'tab', href: '/(app)/(tabs)/dashboard' },
+      },
+      {
+        id: 'brokers',
+        label: 'Brokers',
+        icon: Landmark,
+        target: { kind: 'tab', href: '/(app)/(tabs)/brokers' },
+      },
+      {
+        id: 'trades',
+        label: 'Trades',
+        icon: ChartNoAxesCombined,
+        target: { kind: 'tab', href: '/(app)/(tabs)/trades' },
+      },
+    ],
+  },
+  {
     id: 'signals',
     title: 'Signals',
     items: [
@@ -58,14 +82,14 @@ export const MOBILE_MORE_SECTIONS: MobileNavSection[] = [
         id: 'channels',
         label: 'Channels',
         icon: Radio,
-        target: { kind: 'stack', href: '/(app)/copier-status' },
+        target: { kind: 'tab', href: '/(app)/(tabs)/channels' },
         description: 'Telegram channels & copier engine',
       },
       {
         id: 'backtest',
         label: 'Backtest',
         icon: FlaskConical,
-        target: { kind: 'web', path: '/backtest' },
+        target: { kind: 'tab', href: '/(app)/(tabs)/backtest' },
       },
       {
         id: 'activities',
@@ -177,6 +201,7 @@ export const TAB_NAV_META = {
   dashboard: { label: 'Dashboard', icon: LayoutDashboard },
   brokers: { label: 'Brokers', icon: Landmark },
   trades: { label: 'Trades', icon: ChartNoAxesCombined },
-  alerts: { label: 'Alerts', icon: Bell },
+  channels: { label: 'Channels', icon: Radio },
+  backtest: { label: 'Backtest', icon: FlaskConical },
   more: { label: 'More', icon: Menu },
 } as const

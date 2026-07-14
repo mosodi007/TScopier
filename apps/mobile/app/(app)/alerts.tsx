@@ -1,6 +1,6 @@
 import { FlatList, Pressable, View } from 'react-native'
 import { useNotifications } from '@/context/NotificationsContext'
-import { AppScreen } from '@/components/layout/AppScreen'
+import { StackScreen } from '@/components/layout/StackScreen'
 import {
   BodyText,
   Button,
@@ -13,7 +13,7 @@ export default function AlertsScreen() {
   const { notifications, markRead, markAllRead, unreadCount } = useNotifications()
 
   return (
-    <AppScreen
+    <StackScreen
       title="Alerts"
       subtitle={`${unreadCount} unread notification${unreadCount === 1 ? '' : 's'}`}
     >
@@ -43,6 +43,6 @@ export default function AlertsScreen() {
           </Pressable>
         )}
       />
-    </AppScreen>
+    </StackScreen>
   )
 }

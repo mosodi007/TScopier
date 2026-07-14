@@ -172,21 +172,6 @@ export default function DashboardScreen() {
               </View>
             </DashboardPanel>
 
-            <View className="flex-row gap-2">
-              <Button
-                label="Channels"
-                variant="secondary"
-                className="flex-1"
-                onPress={() => router.push('/(app)/copier-status')}
-              />
-              <Button
-                label="Link Telegram"
-                variant="secondary"
-                className="flex-1"
-                onPress={() => router.push('/(app)/telegram-link')}
-              />
-            </View>
-
             <View>
               <View className="mb-3 flex-row items-center justify-between">
                 <HeadingText>Linked accounts</HeadingText>

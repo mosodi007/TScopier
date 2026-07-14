@@ -1,11 +1,9 @@
 import { Tabs } from 'expo-router'
-import { useNotifications } from '@/context/NotificationsContext'
 import { useTheme } from '@/context/ThemeContext'
 import { TAB_NAV_META } from '@/lib/navigation'
 import { tscTheme } from '@/lib/tscTheme'
 
 export default function TabLayout() {
-  const { unreadCount } = useNotifications()
   const { isDark } = useTheme()
 
   const tabBarStyle = {
@@ -20,6 +18,8 @@ export default function TabLayout() {
         tabBarStyle,
         tabBarActiveTintColor: isDark ? tscTheme.primaryMuted.dark : tscTheme.primaryMuted.light,
         tabBarInactiveTintColor: tscTheme.textMuted.light,
+        tabBarLabelStyle: { fontSize: 10, fontWeight: '500' },
+        tabBarAllowFontScaling: false,
       }}
     >
       <Tabs.Screen
@@ -53,12 +53,21 @@ export default function TabLayout() {
         }}
       />
       <Tabs.Screen
-        name="alerts"
+        name="channels"
         options={{
-          title: TAB_NAV_META.alerts.label,
-          tabBarBadge: unreadCount > 0 ? unreadCount : undefined,
+          title: TAB_NAV_META.channels.label,
           tabBarIcon: ({ color, size }) => {
-            const Icon = TAB_NAV_META.alerts.icon
+            const Icon = TAB_NAV_META.channels.icon
+            return <Icon color={color} size={size} />
+          },
+        }}
+      />
+      <Tabs.Screen
+        name="backtest"
+        options={{
+          title: TAB_NAV_META.backtest.label,
+          tabBarIcon: ({ color, size }) => {
+            const Icon = TAB_NAV_META.backtest.icon
             return <Icon color={color} size={size} />
           },
         }}
