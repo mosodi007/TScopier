@@ -4,7 +4,7 @@ import { Screen, Subtitle, Title } from '@/components/ui'
 import { cn } from '@/lib/cn'
 
 interface AppScreenProps {
-  title?: string
+  title?: React.ReactNode
   subtitle?: string
   children: React.ReactNode
   /** Hide top header actions (e.g. auth screens). */
@@ -28,7 +28,11 @@ export function AppScreen({
       {hasHeader ? (
         <View className={cn('mb-3 flex-row items-center justify-between gap-3', noPadding && 'px-4')}>
           <View className="min-w-0 flex-1">
-            {title ? <Title>{title}</Title> : null}
+            {title != null
+              ? typeof title === 'string'
+                ? <Title>{title}</Title>
+                : title
+              : null}
             {subtitle ? <Subtitle>{subtitle}</Subtitle> : null}
           </View>
           {!hideHeaderActions ? <AppHeaderActions /> : null}

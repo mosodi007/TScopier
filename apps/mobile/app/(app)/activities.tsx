@@ -1,39 +1,55 @@
 import { useCallback, useEffect, useState } from 'react'
-import { FlatList, RefreshControl, Text, View } from 'react-native'
+import { FlatList, RefreshControl, View } from 'react-native'
 import { useAuth } from '@/context/AuthContext'
 import { supabase } from '@/lib/supabase'
+import { CopierEngineActivityRow } from '@/components/dashboard/CopierEngineActivityRow'
 import { StackScreen } from '@/components/layout/StackScreen'
+import { BodyText, Card } from '@/components/ui'
 import {
-  formatActionLabel,
-  formatShortTime,
-  StatusBadge,
-} from '@/components/dashboard/logDisplay'
-import { BodyText, Card, MutedText } from '@/components/ui'
+  buildChannelDisplayNames,
+  buildCopierEngineActivities,
+  toCopierEngineListItem,
+  TRADE_ACTIVITY_FETCH_LIMIT,
+  TRADE_EXECUTION_LOG_SELECT,
+  type CopierEngineListItem,
+  type TradeActivityLogRow,
+} from '@/lib/copierEngineActivities'
 import { tscTheme } from '@/lib/tscTheme'
-
-interface ActivityRow {
-  id: string
-  action: string
-  status: string
-  created_at: string
-  error_message?: string | null
-}
 
 export default function ActivitiesScreen() {
   const { user } = useAuth()
-  const [rows, setRows] = useState<ActivityRow[]>([])
+  const [rows, setRows] = useState<CopierEngineListItem[]>([])
   const [loading, setLoading] = useState(true)
 
   const load = useCallback(async () => {
     if (!user?.id) return
     setLoading(true)
-    const { data } = await supabase
-      .from('trade_execution_logs')
-      .select('id, action, status, created_at, error_message')
-      .eq('user_id', user.id)
-      .order('created_at', { ascending: false })
-      .limit(50)
-    setRows((data ?? []) as ActivityRow[])
+    const [channelsRes, logsRes] = await Promise.all([
+      supabase
+        .from('telegram_channels')
+        .select('id, display_name, channel_username')
+        .eq('user_id', user.id),
+      supabase
+        .from('trade_execution_logs')
+        .select(TRADE_EXECUTION_LOG_SELECT)
+        .eq('user_id', user.id)
+        .order('created_at', { ascending: false })
+        .limit(TRADE_ACTIVITY_FETCH_LIMIT),
+    ])
+
+    const channelNames = buildChannelDisplayNames(
+      (channelsRes.data ?? []).map(ch => ({
+        id: ch.id,
+        display_name: ch.display_name ?? '',
+        channel_username: ch.channel_username,
+      })),
+    )
+
+    setRows(
+      buildCopierEngineActivities((logsRes.data ?? []) as TradeActivityLogRow[], channelNames).map(
+        toCopierEngineListItem,
+      ),
+    )
     setLoading(false)
   }, [user?.id])
 
@@ -42,7 +58,10 @@ export default function ActivitiesScreen() {
   }, [load])
 
   return (
-    <StackScreen title="Copier engine" subtitle="Trade activities and management events">
+    <StackScreen
+      title="Copier engine"
+      subtitle="Copier engine activity from your signal channels"
+    >
       <FlatList
         className="mt-4"
         data={rows}
@@ -54,24 +73,19 @@ export default function ActivitiesScreen() {
         ListEmptyComponent={
           !loading ? (
             <Card>
-              <BodyText>No activities yet.</BodyText>
+              <BodyText>
+                Copier engine activity will appear here once your copier executes actions from signal
+                channels.
+              </BodyText>
             </Card>
           ) : null
         }
         renderItem={({ item }) => (
-          <Card>
-            <View className="flex-row items-start justify-between gap-2">
-              <Text className="flex-1 text-base font-semibold text-neutral-900 dark:text-neutral-50">
-                {formatActionLabel(item.action)}
-              </Text>
-              <StatusBadge status={item.status} />
-            </View>
-            <MutedText className="mt-2 text-xs">{formatShortTime(item.created_at)}</MutedText>
-            {item.error_message ? (
-              <BodyText className="mt-2 text-sm text-neutral-600 dark:text-neutral-300">{item.error_message}</BodyText>
-            ) : null}
+          <Card className="overflow-hidden p-0">
+            <CopierEngineActivityRow activity={item} variant="full" />
           </Card>
         )}
+        ItemSeparatorComponent={() => <View className="h-0" />}
       />
     </StackScreen>
   )

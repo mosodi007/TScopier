@@ -1,59 +1,37 @@
 import { Tabs } from 'expo-router'
-import { useSafeAreaInsets } from 'react-native-safe-area-context'
-import { useTheme } from '@/context/ThemeContext'
-import { TabBarNavIcon } from '@/components/navigation/TabBarNavIcon'
-import { TAB_NAV_META } from '@/lib/navigation'
-import { tscTheme } from '@/lib/tscTheme'
-
-const TAB_SCREENS = [
-  'dashboard',
-  'brokers',
-  'trades',
-  'channels',
-  'backtest',
-  'more',
-] as const
+import { FloatingTabBar } from '@/components/navigation/FloatingTabBar'
+import { TAB_NAV_META, TAB_SCREEN_ORDER } from '@/lib/navigation'
 
 export default function TabLayout() {
-  const { isDark } = useTheme()
-  const insets = useSafeAreaInsets()
-  const bottomPad = Math.max(insets.bottom, 10)
-
-  const tabBarStyle = {
-    backgroundColor: isDark ? tscTheme.tabBar.dark : tscTheme.tabBar.light,
-    borderTopColor: isDark ? tscTheme.tabBarBorder.dark : tscTheme.tabBarBorder.light,
-    paddingTop: 6,
-    paddingBottom: bottomPad,
-    height: 56 + bottomPad + 3,
-  }
-
   return (
     <Tabs
+      tabBar={props => <FloatingTabBar {...props} />}
       screenOptions={{
         headerShown: false,
-        tabBarStyle,
-        tabBarActiveTintColor: isDark ? tscTheme.primaryMuted.dark : tscTheme.primary,
-        tabBarInactiveTintColor: tscTheme.textMuted.light,
-        tabBarLabelStyle: { fontSize: 10, fontWeight: '600', marginTop: 2 },
-        tabBarAllowFontScaling: false,
+        tabBarShowLabel: false,
+        tabBarStyle: {
+          position: 'absolute',
+          backgroundColor: 'transparent',
+          borderTopWidth: 0,
+          elevation: 0,
+          shadowOpacity: 0,
+        },
       }}
     >
-      {TAB_SCREENS.map(name => {
+      {TAB_SCREEN_ORDER.map(name => {
         const meta = TAB_NAV_META[name]
-        const Icon = meta.icon
         return (
           <Tabs.Screen
             key={name}
             name={name}
             options={{
               title: meta.label,
-              tabBarIcon: ({ color, size, focused }) => (
-                <TabBarNavIcon icon={Icon} focused={focused} color={color} size={size} />
-              ),
             }}
           />
         )
       })}
+      <Tabs.Screen name="brokers" options={{ href: null }} />
+      <Tabs.Screen name="channels" options={{ href: null }} />
     </Tabs>
   )
 }

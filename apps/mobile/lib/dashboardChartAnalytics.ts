@@ -1,9 +1,6 @@
 import { isTradeableClosedRow } from '@/lib/dashboardTradeStats'
-import {
-  computeProfitByChannel,
-  scopeDashboardCopierMtTrades,
-  type PerformanceChannelLinkMaps,
-} from '@/lib/chartChannelAttribution'
+import * as ChartChannelAttribution from '@/lib/chartChannelAttribution'
+import type { PerformanceChannelLinkMaps } from '@/lib/chartChannelAttribution'
 import {
   buildTradeVolume7Day,
   type ChannelProfitRow,
@@ -64,7 +61,11 @@ export function deriveDashboardCharts(args: {
   const hasConnectScope = (args.accounts?.length ?? 0) > 0
 
   const scopedMt = hasMtSource
-    ? scopeDashboardCopierMtTrades(args.mtTrades, args.channelLinkMaps, args.accounts)
+    ? ChartChannelAttribution.scopeDashboardCopierMtTrades(
+        args.mtTrades,
+        args.channelLinkMaps,
+        args.accounts,
+      )
     : []
   const useMtSummaries = scopedMt.length > 0
   const mtLoadedButEmpty = hasConnectScope && hasMtSource && scopedMt.length === 0
@@ -78,7 +79,12 @@ export function deriveDashboardCharts(args: {
   return {
     tradeVolume7Day: buildTradeVolume7Day(chartForVolume, now),
     channelProfit7d: useMtSummaries
-      ? computeProfitByChannel(scopedMt, args.channelLinkMaps, 'Channel', now)
+      ? ChartChannelAttribution.computeProfitByChannel(
+          scopedMt,
+          args.channelLinkMaps,
+          'Channel',
+          now,
+        )
       : mtLoadedButEmpty
         ? []
         : computeProfitByChannelFromDb(args.dbTrades, args.channelLinkMaps.channelNames, now),

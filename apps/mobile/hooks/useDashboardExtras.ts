@@ -1,5 +1,14 @@
 import { useCallback, useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase'
+import {
+  buildChannelDisplayNames,
+  buildCopierEngineActivities,
+  toCopierEngineListItem,
+  TRADE_ACTIVITY_FETCH_LIMIT,
+  TRADE_EXECUTION_LOG_SELECT,
+  type CopierEngineListItem,
+  type TradeActivityLogRow,
+} from '@/lib/copierEngineActivities'
 
 export interface CopierLogRow {
   id: string
@@ -10,29 +19,23 @@ export interface CopierLogRow {
   channel_name?: string | null
 }
 
-export interface TradeActivityRow {
-  id: string
-  action: string
-  status: string
-  created_at: string
-  details?: string | null
-}
+const DASHBOARD_COPIER_ENGINE_LIMIT = 10
 
 function buildChannelNames(
   channels: Array<{ id: string; display_name?: string | null; channel_username?: string | null }>,
 ): Record<string, string> {
-  const out: Record<string, string> = {}
-  for (const channel of channels) {
-    const name = channel.display_name?.trim()
-    const username = channel.channel_username?.trim().replace(/^@/, '')
-    out[channel.id] = name || (username ? `@${username}` : 'Unnamed channel')
-  }
-  return out
+  return buildChannelDisplayNames(
+    channels.map(ch => ({
+      id: ch.id,
+      display_name: ch.display_name ?? '',
+      channel_username: ch.channel_username,
+    })),
+  )
 }
 
 export function useDashboardExtras(userId: string | undefined) {
   const [copierLogs, setCopierLogs] = useState<CopierLogRow[]>([])
-  const [activities, setActivities] = useState<TradeActivityRow[]>([])
+  const [copierEngineActivities, setCopierEngineActivities] = useState<CopierEngineListItem[]>([])
 
   const load = useCallback(async () => {
     if (!userId) return
@@ -45,10 +48,10 @@ export function useDashboardExtras(userId: string | undefined) {
         .limit(8),
       supabase
         .from('trade_execution_logs')
-        .select('id, action, status, created_at, error_message')
+        .select(TRADE_EXECUTION_LOG_SELECT)
         .eq('user_id', userId)
         .order('created_at', { ascending: false })
-        .limit(8),
+        .limit(TRADE_ACTIVITY_FETCH_LIMIT),
       supabase
         .from('telegram_channels')
         .select('id, display_name, channel_username')
@@ -71,20 +74,17 @@ export function useDashboardExtras(userId: string | undefined) {
       }),
     )
 
-    setActivities(
-      (logsRes.data ?? []).map(row => ({
-        id: row.id,
-        action: row.action,
-        status: row.status,
-        created_at: row.created_at,
-        details: row.error_message,
-      })),
-    )
+    const activities = buildCopierEngineActivities(
+      (logsRes.data ?? []) as TradeActivityLogRow[],
+      channelNames,
+    ).map(toCopierEngineListItem)
+
+    setCopierEngineActivities(activities.slice(0, DASHBOARD_COPIER_ENGINE_LIMIT))
   }, [userId])
 
   useEffect(() => {
     void load()
   }, [load])
 
-  return { copierLogs, activities, refreshExtras: load }
+  return { copierLogs, copierEngineActivities, refreshExtras: load }
 }

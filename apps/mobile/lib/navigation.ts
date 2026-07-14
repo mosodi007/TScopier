@@ -7,7 +7,7 @@ import {
   ClipboardList,
   CreditCard,
   FlaskConical,
-  Landmark,
+  Home,
   LayoutDashboard,
   LifeBuoy,
   Menu,
@@ -24,7 +24,7 @@ export type MobileNavTarget =
       kind: 'tab'
       href:
         | '/(app)/(tabs)/dashboard'
-        | '/(app)/(tabs)/brokers'
+        | '/(app)/(tabs)/signals'
         | '/(app)/(tabs)/trades'
         | '/(app)/(tabs)/channels'
         | '/(app)/(tabs)/backtest'
@@ -56,21 +56,21 @@ export const MOBILE_MORE_SECTIONS: MobileNavSection[] = [
     items: [
       {
         id: 'dashboard',
-        label: 'Dashboard',
+        label: 'Home',
         icon: LayoutDashboard,
         target: { kind: 'tab', href: '/(app)/(tabs)/dashboard' },
-      },
-      {
-        id: 'brokers',
-        label: 'Brokers',
-        icon: Landmark,
-        target: { kind: 'tab', href: '/(app)/(tabs)/brokers' },
       },
       {
         id: 'trades',
         label: 'Trades',
         icon: ChartNoAxesCombined,
         target: { kind: 'tab', href: '/(app)/(tabs)/trades' },
+      },
+      {
+        id: 'signals',
+        label: 'Signals',
+        icon: SlidersHorizontal,
+        target: { kind: 'tab', href: '/(app)/(tabs)/signals' },
       },
     ],
   },
@@ -105,9 +105,9 @@ export const MOBILE_MORE_SECTIONS: MobileNavSection[] = [
       },
       {
         id: 'signal-history',
-        label: 'Signal History',
+        label: 'Manage Signals',
         icon: SlidersHorizontal,
-        target: { kind: 'web', path: '/manage-signals' },
+        target: { kind: 'tab', href: '/(app)/(tabs)/signals' },
       },
       {
         id: 'performance',
@@ -197,11 +197,18 @@ export const MOBILE_MORE_SECTIONS: MobileNavSection[] = [
   },
 ]
 
+export const TAB_SCREEN_ORDER = [
+  'dashboard',
+  'signals',
+  'trades',
+  'backtest',
+  'more',
+] as const
+
 export const TAB_NAV_META = {
-  dashboard: { label: 'Dashboard', icon: LayoutDashboard },
-  brokers: { label: 'Brokers', icon: Landmark },
+  dashboard: { label: 'Home', icon: Home },
+  signals: { label: 'Signals', icon: SlidersHorizontal },
   trades: { label: 'Trades', icon: ChartNoAxesCombined },
-  channels: { label: 'Channels', icon: Radio },
   backtest: { label: 'Backtest', icon: FlaskConical },
   more: { label: 'More', icon: Menu },
 } as const

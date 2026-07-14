@@ -5,7 +5,9 @@
     "paths": {
       "@/*": ["./*"],
       "@tscopier/shared": ["../../packages/shared/src/index.ts"],
-      "@tscopier/shared/*": ["../../packages/shared/src/*"]
+      "@tscopier/shared/*": ["../../packages/shared/src/*"],
+      "@tscopier/web-lib/*": ["../../src/lib/*"],
+      "@tscopier/web-i18n/*": ["../../src/i18n/*"]
     }
   },
   "include": [
