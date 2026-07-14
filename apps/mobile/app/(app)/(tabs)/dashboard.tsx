@@ -34,7 +34,10 @@ export default function DashboardScreen() {
     refresh,
   } = useDashboardMetrics(user?.id)
   const { copierLogs, activities, refreshExtras } = useDashboardExtras(user?.id)
-  const { tradeVolume7Day, channelProfit7d, loading: chartsLoading, refreshCharts } = useDashboardCharts(user?.id)
+  const { tradeVolume7Day, channelProfit7d, loading: chartsLoading, refreshCharts } = useDashboardCharts(
+    user?.id,
+    brokers,
+  )
 
   const onRefresh = async () => {
     await Promise.all([refresh(), refreshExtras(), refreshCharts()])
