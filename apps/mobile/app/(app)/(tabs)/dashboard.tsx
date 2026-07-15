@@ -32,6 +32,8 @@ import {
   StatusBadge,
 } from '@/components/dashboard/logDisplay'
 import { AppScreen } from '@/components/layout/AppScreen'
+import { HomeSectionTitle } from '@/components/home/HomeSectionTitle'
+import { CopierPauseToggle } from '@/components/dashboard/CopierPauseToggle'
 import { Button, Card, HeadingText, pnlTextClass, MutedText } from '@/components/ui'
 import { formatMoney, formatSignedMoney, formatVsYesterdayDelta } from '@/lib/formatMoney'
 import { tscTheme } from '@/lib/tscTheme'
@@ -104,7 +106,18 @@ export default function DashboardScreen() {
         onPageSelected={handlePageSelected}
       >
         <View key="dashboard" style={{ flex: 1 }}>
+          <HomeSectionTitle
+            title="Dashboard"
+            action={
+              <CopierPauseToggle
+                brokers={brokers}
+                brokersLoading={loading}
+                liveByBroker={liveByBroker}
+              />
+            }
+          />
           <ScrollView
+            style={{ flex: 1 }}
             refreshControl={
               <RefreshControl refreshing={refreshing} onRefresh={() => void onRefresh()} tintColor={tscTheme.primary} />
             }
@@ -246,12 +259,7 @@ export default function DashboardScreen() {
         </View>
 
         <View key="brokers" style={{ flex: 1 }}>
-          <ScrollView
-            contentContainerClassName="gap-4 pb-24"
-            showsVerticalScrollIndicator={false}
-          >
-            <HomeBrokersSection metrics={metrics} />
-          </ScrollView>
+          <HomeBrokersSection metrics={metrics} />
         </View>
 
         <View key="channels" style={{ flex: 1 }}>

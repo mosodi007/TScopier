@@ -5,6 +5,7 @@ import { whenRealtimeReady } from '@tscopier/shared'
 import type { BrokerAccount } from '@tscopier/shared'
 import { useAuth } from '@/context/AuthContext'
 import { supabase } from '@/lib/supabase'
+import { HomeSectionTitle } from '@/components/home/HomeSectionTitle'
 import {
   Button,
   Card,
@@ -69,14 +70,17 @@ export function HomeChannelsSection() {
   }
 
   return (
-    <ScrollView
-      nestedScrollEnabled
-      refreshControl={
-        <RefreshControl refreshing={refreshing} onRefresh={() => void onRefresh()} tintColor={tscTheme.primary} />
-      }
-      contentContainerClassName="gap-4 pb-24"
-      showsVerticalScrollIndicator={false}
-    >
+    <View className="flex-1">
+      <HomeSectionTitle title="Channels" />
+      <ScrollView
+        style={{ flex: 1 }}
+        nestedScrollEnabled
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={() => void onRefresh()} tintColor={tscTheme.primary} />
+        }
+        contentContainerClassName="gap-4 pb-24"
+        showsVerticalScrollIndicator={false}
+      >
       <Card>
         <LabelText>Telegram listener</LabelText>
         <Text className={`mt-1 text-lg ${listenerLive ? 'text-teal-600 dark:text-teal-400' : 'text-amber-600 dark:text-amber-400'}`}>
@@ -121,5 +125,6 @@ export function HomeChannelsSection() {
         <Button label="Full channel settings" variant="secondary" onPress={() => void openWebAppPath('/channels')} />
       </View>
     </ScrollView>
+    </View>
   )
 }

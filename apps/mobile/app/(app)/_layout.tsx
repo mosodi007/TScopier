@@ -37,6 +37,7 @@ export default function AppLayout() {
       <Stack.Screen name="billing" options={{ presentation: 'modal', title: 'Billing' }} />
       <Stack.Screen name="copier-status" options={{ title: 'Copier status' }} />
       <Stack.Screen name="channel-config" options={{ title: 'Channel config' }} />
+      <Stack.Screen name="broker-config/[id]" options={{ presentation: 'modal', title: 'Configure trading' }} />
     </Stack>
   )
 }
