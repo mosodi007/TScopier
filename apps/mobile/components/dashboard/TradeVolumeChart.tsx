@@ -3,7 +3,7 @@ import { Text, View } from 'react-native'
 import Svg, { Line, Rect, Text as SvgText } from 'react-native-svg'
 import { useTheme } from '@/context/ThemeContext'
 import {
-  CHART_HEIGHT,
+  CHART_HEIGHT as DEFAULT_CHART_HEIGHT,
   ChartCard,
   ChartPlot,
   ChartSkeleton,
@@ -14,7 +14,8 @@ import { chartThemeColors } from '@/lib/chartTheme'
 import { formatMoney } from '@/lib/formatMoney'
 import { tradeVolumeIsEmpty, type TradeVolumeDay } from '@/lib/dashboardCharts'
 
-const PADDING = { top: 8, right: 12, left: 56, bottom: 36 }
+const CHART_HEIGHT = DEFAULT_CHART_HEIGHT / 2
+const PADDING = { top: 8, right: 12, left: 56, bottom: 28 }
 
 interface TradeVolumeChartProps {
   data: TradeVolumeDay[]
@@ -161,7 +162,7 @@ export function TradeVolumeChart({ data, loading }: TradeVolumeChartProps) {
       </View>
 
       {loading ? (
-        <ChartSkeleton />
+        <ChartSkeleton height={CHART_HEIGHT} />
       ) : empty ? (
         <View style={{ height: CHART_HEIGHT }} className="items-center justify-center px-4">
           <Text className="text-center text-sm text-neutral-400 dark:text-neutral-500">
@@ -170,7 +171,7 @@ export function TradeVolumeChart({ data, loading }: TradeVolumeChartProps) {
         </View>
       ) : (
         <>
-          <ChartPlot>
+          <ChartPlot height={CHART_HEIGHT}>
             <Svg width={width} height={CHART_HEIGHT} viewBox={`0 0 ${width} ${CHART_HEIGHT}`}>
               {chart}
             </Svg>

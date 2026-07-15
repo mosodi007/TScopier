@@ -12,8 +12,8 @@ export function useChartWidth(): number {
   return Math.max(width - CHART_HORIZONTAL_INSET, 280)
 }
 
-export function ChartSkeleton() {
-  return <View style={{ height: CHART_HEIGHT }} className="rounded-xl bg-neutral-100 dark:bg-neutral-800/50" />
+export function ChartSkeleton({ height = CHART_HEIGHT }: { height?: number }) {
+  return <View style={{ height }} className="rounded-xl bg-neutral-100 dark:bg-neutral-800/50" />
 }
 
 export function ChartCard({ children }: { children: React.ReactNode }) {
@@ -24,10 +24,16 @@ export function ChartCard({ children }: { children: React.ReactNode }) {
   )
 }
 
-export function ChartPlot({ children }: { children: React.ReactNode }) {
+export function ChartPlot({
+  children,
+  height = CHART_HEIGHT,
+}: {
+  children: React.ReactNode
+  height?: number
+}) {
   const chartWidth = useChartWidth()
   return (
-    <View style={{ width: chartWidth, height: CHART_HEIGHT, alignSelf: 'center' }}>
+    <View style={{ width: chartWidth, height, alignSelf: 'center' }}>
       {children}
     </View>
   )
