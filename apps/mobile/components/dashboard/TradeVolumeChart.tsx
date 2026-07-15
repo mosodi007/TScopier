@@ -46,8 +46,9 @@ export function TradeVolumeChart({ data, loading }: TradeVolumeChartProps) {
     const maxValue = Math.max(...data.flatMap(d => [d.profit, d.loss]), 1)
     const yTicks = [0, maxValue * 0.5, maxValue]
     const groupWidth = innerWidth / data.length
-    const barWidth = Math.min(14, groupWidth * 0.28)
-    const gap = 4
+    const barGap = 4
+    const maxBarWidth = 20
+    const barWidth = Math.min(maxBarWidth, (groupWidth - barGap) / 2)
 
     const yScale = (value: number) => PADDING.top + innerHeight - (value / maxValue) * innerHeight
 
@@ -86,8 +87,8 @@ export function TradeVolumeChart({ data, loading }: TradeVolumeChartProps) {
 
     data.forEach((day, index) => {
       const centerX = PADDING.left + groupWidth * index + groupWidth / 2
-      const lossX = centerX - barWidth - gap / 2
-      const profitX = centerX + gap / 2
+      const lossX = centerX - barWidth - barGap / 2
+      const profitX = centerX + barGap / 2
       const lossHeight = (day.loss / maxValue) * innerHeight
       const profitHeight = (day.profit / maxValue) * innerHeight
       const baseY = PADDING.top + innerHeight
