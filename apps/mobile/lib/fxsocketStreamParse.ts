@@ -4,6 +4,7 @@ export interface FxsocketAccountStreamSnapshot {
   balance?: number
   equity?: number
   openPnl?: number
+  openPnlSource?: 'explicit' | 'derived'
   currency?: string
 }
 
@@ -45,17 +46,45 @@ export function parseFxsocketAccountStreamData(raw: Record<string, unknown>): Fx
   const equity = readNum(raw.equity ?? raw.Equity)
   const explicitProfit = readProfitField(raw)
   let openPnl: number | undefined
+  let openPnlSource: 'explicit' | 'derived' | undefined
   if (explicitProfit != null) {
     openPnl = explicitProfit
+    openPnlSource = 'explicit'
   } else if (balance != null && equity != null) {
     openPnl = equity - balance
+    openPnlSource = 'derived'
   }
   return {
     balance,
     equity: equity ?? balance,
     openPnl,
+    openPnlSource,
     currency: readStr(raw.currency ?? raw.Currency),
   }
+}
+
+export function shouldApplyAccountStreamOpenPnl(
+  snap: FxsocketAccountStreamSnapshot,
+  openTrades: number,
+): boolean {
+  if (snap.openPnl == null || snap.openPnlSource == null) return false
+  if (openTrades <= 0) return true
+  if (snap.openPnlSource === 'explicit' && Math.abs(snap.openPnl) > 0.001) return true
+  if (snap.openPnlSource === 'derived' && Math.abs(snap.openPnl) > 0.001) return true
+  return false
+}
+
+export function resolveFxsocketFloatingOpenPnl(
+  snap: FxsocketAccountStreamSnapshot,
+  openTrades = 0,
+): number | undefined {
+  if (shouldApplyAccountStreamOpenPnl(snap, openTrades) && snap.openPnl != null) {
+    return snap.openPnl
+  }
+  if (snap.balance != null && snap.equity != null) {
+    return Math.round((snap.equity - snap.balance) * 100) / 100
+  }
+  return undefined
 }
 
 function unwrapPositions(data: unknown): unknown[] {

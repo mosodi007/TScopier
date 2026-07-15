@@ -3,6 +3,7 @@ import type { BrokerAccount } from '@tscopier/shared'
 import { supabase } from '@/lib/supabase'
 import { useDashboardRealtime } from '@/hooks/useDashboardRealtime'
 import { useFxsocketStream } from '@/hooks/useFxsocketStream'
+import { resolveFxsocketFloatingOpenPnl } from '@/lib/fxsocketStreamParse'
 import {
   computeAggregateMetrics,
   getLocalDayBounds,
@@ -101,26 +102,39 @@ export function useDashboardMetrics(userId: string | undefined): DashboardMetric
 
   useFxsocketStream(brokers, {
     onAccount: (brokerId, data) => {
-      setLiveByBroker(prev => ({
-        ...prev,
-        [brokerId]: {
-          ...(prev[brokerId] ?? {}),
-          balance: data.balance ?? prev[brokerId]?.balance,
-          equity: data.equity ?? prev[brokerId]?.equity,
-          openPnl: data.openPnl ?? prev[brokerId]?.openPnl,
-          currency: data.currency ?? prev[brokerId]?.currency,
-        },
-      }))
+      setLiveByBroker(prev => {
+        const current = prev[brokerId] ?? {}
+        const openTrades = current.openTrades ?? 0
+        const accountOpenPnl = resolveFxsocketFloatingOpenPnl(data, openTrades)
+        const openPnl =
+          openTrades > 0 && current.openPnl != null && accountOpenPnl === 0
+            ? current.openPnl
+            : accountOpenPnl ?? current.openPnl
+
+        return {
+          ...prev,
+          [brokerId]: {
+            ...current,
+            balance: data.balance ?? current.balance,
+            equity: data.equity ?? current.equity,
+            openPnl,
+            currency: data.currency ?? current.currency,
+          },
+        }
+      })
     },
     onPositions: (brokerId, data) => {
-      setLiveByBroker(prev => ({
-        ...prev,
-        [brokerId]: {
-          ...(prev[brokerId] ?? {}),
-          openTrades: data.openTrades,
-          openPnl: data.openPnl ?? prev[brokerId]?.openPnl,
-        },
-      }))
+      setLiveByBroker(prev => {
+        const current = prev[brokerId] ?? {}
+        return {
+          ...prev,
+          [brokerId]: {
+            ...current,
+            openTrades: data.openTrades,
+            openPnl: data.openPnl ?? current.openPnl,
+          },
+        }
+      })
     },
   })
 

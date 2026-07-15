@@ -74,3 +74,43 @@ export function normalizeSignalChannelIds(raw: string[] | null | undefined): str
   if (!raw?.length) return []
   return raw.map(id => String(id).trim().toLowerCase()).filter(Boolean)
 }
+
+type ChartTradeConnectRow = {
+  brokerAccountId?: string | null
+  openedAt?: string | null
+  closedAt?: string | null
+  status?: string
+}
+
+function resolveChartTradeSinceConnectMs(trade: ChartTradeConnectRow): number | null {
+  const opened = trade.openedAt ? parseMtHistoryTimestamp(trade.openedAt) : null
+  if (opened != null) return opened
+  if (trade.status === 'closed' && trade.closedAt) {
+    return parseMtHistoryTimestamp(trade.closedAt)
+  }
+  return null
+}
+
+function isChartTradeSinceConnect(
+  trade: ChartTradeConnectRow,
+  connectMsByBrokerId: ReadonlyMap<string, number>,
+): boolean {
+  const brokerId = trade.brokerAccountId?.trim()
+  if (!brokerId) return true
+  const connectMs = connectMsByBrokerId.get(brokerId)
+  if (connectMs == null) return true
+
+  const activityMs = resolveChartTradeSinceConnectMs(trade)
+  if (activityMs == null) return trade.status === 'open'
+  return activityMs >= connectMs
+}
+
+export function filterChartTradesSinceConnect<T extends ChartTradeConnectRow>(
+  trades: T[],
+  accounts: readonly BrokerConnectAnchor[],
+): T[] {
+  if (trades.length === 0 || accounts.length === 0) return trades
+  const connectMsByBrokerId = buildBrokerConnectMsMap(accounts)
+  if (connectMsByBrokerId.size === 0) return trades
+  return trades.filter(trade => isChartTradeSinceConnect(trade, connectMsByBrokerId))
+}

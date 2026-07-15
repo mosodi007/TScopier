@@ -15,6 +15,7 @@ export interface ChannelProfitRow {
 }
 
 export interface DashboardChartTrade {
+  brokerAccountId?: string | null
   lotSize: number
   profit: number | null
   status: 'open' | 'closed'

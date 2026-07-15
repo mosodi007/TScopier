@@ -26,8 +26,9 @@ export function FloatingTabBar({ state, navigation }: BottomTabBarProps) {
     const routeIndex = state.routes.findIndex(r => r.key === route.key)
     return state.index === routeIndex
   })
-  const { highlightStyle, onTabLayout } = useSlidingTabHighlight(
+  const { highlightStyle, onContainerLayout } = useSlidingTabHighlight(
     activeVisibleIndex >= 0 ? activeVisibleIndex : 0,
+    { tabCount: visibleRoutes.length, gap: 2 },
   )
 
   return (
@@ -43,10 +44,11 @@ export function FloatingTabBar({ state, navigation }: BottomTabBarProps) {
       }}
     >
       <View
+        onLayout={onContainerLayout}
         style={{
           position: 'relative',
           flexDirection: 'row',
-          alignItems: 'center',
+          alignItems: 'stretch',
           justifyContent: 'space-between',
           gap: 2,
           borderRadius: 28,
@@ -66,7 +68,7 @@ export function FloatingTabBar({ state, navigation }: BottomTabBarProps) {
         }}
       >
         <SlidingTabHighlight color={highlightColor} borderRadius={18} style={highlightStyle} />
-        {visibleRoutes.map((route, index) => {
+        {visibleRoutes.map((route) => {
           const routeIndex = state.routes.findIndex(r => r.key === route.key)
           const focused = state.index === routeIndex
           const meta = TAB_NAV_META[route.name as keyof typeof TAB_NAV_META]
@@ -78,7 +80,6 @@ export function FloatingTabBar({ state, navigation }: BottomTabBarProps) {
           return (
             <Pressable
               key={route.key}
-              onLayout={onTabLayout(index)}
               accessibilityRole="button"
               accessibilityState={focused ? { selected: true } : {}}
               accessibilityLabel={meta.label}

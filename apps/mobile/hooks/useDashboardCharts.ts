@@ -8,7 +8,11 @@ import {
   fetchBrokerMtTrades,
 } from '@/lib/brokerTradeHistory'
 import { buildPerformanceChannelLinkMaps } from '@/lib/chartChannelAttribution'
-import { deriveDashboardCharts } from '@/lib/dashboardChartAnalytics'
+import {
+  deriveDashboardAnalytics,
+  deriveDashboardCharts,
+  type DashboardAnalytics,
+} from '@/lib/dashboardChartAnalytics'
 import {
   buildChannelProfit7Day,
   buildTradeVolume7Day,
@@ -42,6 +46,7 @@ function dbRowToChartTrade(
     status: 'closed',
     closedAt: row.closed_at,
     openedAt: row.opened_at,
+    brokerAccountId: row.broker_account_id,
     channelId:
       row.telegram_channel_id ??
       attribution?.channel_id ??
@@ -55,6 +60,13 @@ export function useDashboardCharts(
 ) {
   const [tradeVolume7Day, setTradeVolume7Day] = useState<TradeVolumeDay[]>([])
   const [channelProfit7d, setChannelProfit7d] = useState<ChannelProfitRow[]>([])
+  const [analytics, setAnalytics] = useState<DashboardAnalytics>(() =>
+    deriveDashboardAnalytics({
+      chartTrades: [],
+      mtTrades: [],
+      channelLinkMaps: buildPerformanceChannelLinkMaps([], [], [], []),
+    }),
+  )
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
@@ -174,8 +186,16 @@ export function useDashboardCharts(
           }
         })()
 
+        const nextAnalytics = deriveDashboardAnalytics({
+          chartTrades: dbTrades,
+          mtTrades,
+          channelLinkMaps,
+          accounts: currentBrokers,
+        })
+
         setTradeVolume7Day(charts.tradeVolume7Day)
         setChannelProfit7d(charts.channelProfit7d)
+        setAnalytics(nextAnalytics)
         hasLoadedOnceRef.current = true
       } finally {
         if (generation === loadGenerationRef.current) {
@@ -195,7 +215,7 @@ export function useDashboardCharts(
     [load],
   )
 
-  return { tradeVolume7Day, channelProfit7d, loading, error, refreshCharts }
+  return { tradeVolume7Day, channelProfit7d, analytics, loading, error, refreshCharts }
 }
 
 /** @deprecated Use deriveDashboardCharts — kept for tests or direct DB-only fallback. */

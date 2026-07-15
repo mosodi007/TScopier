@@ -33,28 +33,29 @@ export default function DashboardScreen() {
     liveByBroker,
     activeChannels,
     tradesCopiedToday,
-    todaySummary,
-    yesterdaySummary,
     aggregate,
     loading,
     refreshing,
     refresh,
   } = metrics
   const { copierLogs, copierEngineActivities, refreshExtras } = useDashboardExtras(user?.id)
-  const { tradeVolume7Day, channelProfit7d, loading: chartsLoading, refreshCharts } = useDashboardCharts(
-    user?.id,
-    brokers,
-  )
+  const {
+    tradeVolume7Day,
+    channelProfit7d,
+    analytics,
+    loading: chartsLoading,
+    refreshCharts,
+  } = useDashboardCharts(user?.id, brokers)
 
   const onRefresh = async () => {
     await Promise.all([refresh(), refreshExtras(), refreshCharts({ silent: true })])
   }
 
   const tradesSub =
-    todaySummary.taken === 0
+    analytics.tradesTaken === 0
       ? 'No closed trades today'
-      : `${todaySummary.won} won · ${todaySummary.lost} lost${
-          todaySummary.breakeven > 0 ? ` · ${todaySummary.breakeven} BE` : ''
+      : `${analytics.tradesWon} won · ${analytics.tradesLost} lost${
+          analytics.tradesBreakeven > 0 ? ` · ${analytics.tradesBreakeven} BE` : ''
         }`
 
   const openPnlSub =
@@ -100,11 +101,11 @@ export default function DashboardScreen() {
                   <View className="w-1/2 border-b border-neutral-100 dark:border-neutral-800">
                     <StatBlock
                       label="Today's Profit"
-                      value={formatSignedMoney(todaySummary.netPnl)}
-                      sub={formatVsYesterdayDelta(todaySummary.netPnl, yesterdaySummary.netPnl)}
-                      valueClassName={pnlTextClass(todaySummary.netPnl)}
+                      value={formatSignedMoney(analytics.todayProfit)}
+                      sub={formatVsYesterdayDelta(analytics.todayProfit, analytics.yesterdayProfit)}
+                      valueClassName={pnlTextClass(analytics.todayProfit)}
                       subClassName={
-                        todaySummary.netPnl - yesterdaySummary.netPnl < 0
+                        analytics.todayProfit - analytics.yesterdayProfit < 0
                           ? 'text-[#737373]'
                           : 'text-neutral-500 dark:text-neutral-400'
                       }
@@ -113,7 +114,7 @@ export default function DashboardScreen() {
                   <View className="w-1/2 border-r border-neutral-100 dark:border-neutral-800">
                     <StatBlock
                       label="Trades Completed Today"
-                      value={String(todaySummary.taken)}
+                      value={String(analytics.tradesTaken)}
                       sub={tradesSub}
                     />
                   </View>

@@ -2,6 +2,12 @@ import { isTradeableClosedRow } from '@/lib/dashboardTradeStats'
 import * as ChartChannelAttribution from '@/lib/chartChannelAttribution'
 import type { PerformanceChannelLinkMaps } from '@/lib/chartChannelAttribution'
 import {
+  summarizeTodayFromChartTrades,
+  summarizeTodayFromMtTrades,
+  summarizeYesterdayFromChartTrades,
+  summarizeYesterdayFromMtTrades,
+} from '@/lib/dashboardDaySummaries'
+import {
   buildTradeVolume7Day,
   type ChannelProfitRow,
   type DashboardChartTrade,
@@ -9,7 +15,20 @@ import {
 } from '@/lib/dashboardCharts'
 import { coerceMtTimestamp } from '@/lib/mtApiDateTime'
 import { displayTradeProfit, type MtTrade } from '@/lib/mtTrade'
-import type { DashboardConnectAccount } from '@/lib/tradesSinceConnect'
+import {
+  filterChartTradesSinceConnect,
+  type DashboardConnectAccount,
+} from '@/lib/tradesSinceConnect'
+
+export type DashboardAnalytics = {
+  todayProfit: number
+  yesterdayProfit: number
+  tradesTaken: number
+  tradesTakenYesterday: number
+  tradesWon: number
+  tradesLost: number
+  tradesBreakeven: number
+}
 
 function normalizeDirection(direction: string | undefined): 'buy' | 'sell' | '' {
   const raw = String(direction ?? '').toLowerCase()
@@ -88,6 +107,53 @@ export function deriveDashboardCharts(args: {
       : mtLoadedButEmpty
         ? []
         : computeProfitByChannelFromDb(args.dbTrades, args.channelLinkMaps.channelNames, now),
+  }
+}
+
+/** Headline stats for Today's Profit and Trades Completed — mirrors web dashboard. */
+export function deriveDashboardAnalytics(args: {
+  chartTrades: DashboardChartTrade[]
+  mtTrades: MtTrade[]
+  channelLinkMaps: PerformanceChannelLinkMaps
+  accounts?: readonly DashboardConnectAccount[]
+  now?: Date
+}): DashboardAnalytics {
+  const now = args.now ?? new Date()
+  const hasConnectScope = (args.accounts?.length ?? 0) > 0
+  const hasMtSource = args.mtTrades.length > 0
+  const scopedChart = hasConnectScope
+    ? filterChartTradesSinceConnect(args.chartTrades, args.accounts!)
+    : args.chartTrades
+  const scopedMt = hasMtSource
+    ? ChartChannelAttribution.scopeDashboardCopierMtTrades(
+        args.mtTrades,
+        args.channelLinkMaps,
+        args.accounts,
+      )
+    : []
+  const useMtSummaries = scopedMt.length > 0
+  const mtLoadedButEmpty = hasConnectScope && hasMtSource && scopedMt.length === 0
+  const fallbackChart = hasConnectScope ? scopedChart : args.chartTrades
+
+  const todaySummary = useMtSummaries
+    ? summarizeTodayFromMtTrades(scopedMt, now)
+    : mtLoadedButEmpty
+      ? summarizeTodayFromChartTrades([], now)
+      : summarizeTodayFromChartTrades(fallbackChart, now)
+  const yesterdaySummary = useMtSummaries
+    ? summarizeYesterdayFromMtTrades(scopedMt, now)
+    : mtLoadedButEmpty
+      ? summarizeYesterdayFromChartTrades([], now)
+      : summarizeYesterdayFromChartTrades(fallbackChart, now)
+
+  return {
+    todayProfit: todaySummary.netPnl,
+    yesterdayProfit: yesterdaySummary.netPnl,
+    tradesTaken: todaySummary.taken,
+    tradesTakenYesterday: yesterdaySummary.taken,
+    tradesWon: todaySummary.won,
+    tradesLost: todaySummary.lost,
+    tradesBreakeven: todaySummary.breakeven,
   }
 }
 

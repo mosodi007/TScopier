@@ -26,13 +26,18 @@ export function HomeSectionTabs({ value, onChange }: HomeSectionTabsProps) {
   const borderColor = isDark ? 'rgba(148, 163, 184, 0.18)' : 'rgba(226, 232, 240, 0.95)'
   const highlightColor = isDark ? 'rgba(4, 47, 46, 0.55)' : '#f0fdfa'
   const activeIndex = TABS.findIndex(tab => tab.id === value)
-  const { highlightStyle, onTabLayout } = useSlidingTabHighlight(activeIndex >= 0 ? activeIndex : 0)
+  const { highlightStyle, onContainerLayout } = useSlidingTabHighlight(
+    activeIndex >= 0 ? activeIndex : 0,
+    { tabCount: TABS.length, gap: 4 },
+  )
 
   return (
     <View
+      onLayout={onContainerLayout}
       style={{
         position: 'relative',
         flexDirection: 'row',
+        alignItems: 'stretch',
         gap: 4,
         borderRadius: 16,
         borderWidth: 1,
@@ -42,7 +47,7 @@ export function HomeSectionTabs({ value, onChange }: HomeSectionTabsProps) {
       }}
     >
       <SlidingTabHighlight color={highlightColor} borderRadius={12} style={highlightStyle} />
-      {TABS.map((tab, index) => {
+      {TABS.map(tab => {
         const focused = value === tab.id
         const color = focused ? activeColor : inactiveColor
         const Icon = tab.icon
@@ -50,7 +55,6 @@ export function HomeSectionTabs({ value, onChange }: HomeSectionTabsProps) {
         return (
           <Pressable
             key={tab.id}
-            onLayout={onTabLayout(index)}
             onPress={() => onChange(tab.id)}
             style={{
               flex: 1,
