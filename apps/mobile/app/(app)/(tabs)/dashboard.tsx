@@ -1,5 +1,13 @@
-import { useState } from 'react'
-import { RefreshControl, ScrollView, View, Text, ActivityIndicator } from 'react-native'
+import { useCallback, useRef, useState } from 'react'
+import {
+  RefreshControl,
+  ScrollView,
+  View,
+  Text,
+  ActivityIndicator,
+  type NativeSyntheticEvent,
+} from 'react-native'
+import PagerView from 'react-native-pager-view'
 import { TscopierLogo } from '@/components/branding/TscopierLogo'
 import { router } from 'expo-router'
 import { useAuth } from '@/context/AuthContext'
@@ -12,7 +20,11 @@ import { DashboardPanel } from '@/components/dashboard/DashboardPanel'
 import { TradeVolumeChart } from '@/components/dashboard/TradeVolumeChart'
 import { ChannelProfitChart } from '@/components/dashboard/ChannelProfitChart'
 import { CopierEngineActivityRow } from '@/components/dashboard/CopierEngineActivityRow'
-import { HomeSectionTabs, type HomeSectionTab } from '@/components/home/HomeSectionTabs'
+import {
+  HomeSectionTabs,
+  HOME_SECTION_TAB_ORDER,
+  type HomeSectionTab,
+} from '@/components/home/HomeSectionTabs'
 import { HomeBrokersSection } from '@/components/home/HomeBrokersSection'
 import { HomeChannelsSection } from '@/components/home/HomeChannelsSection'
 import {
@@ -24,8 +36,14 @@ import { Button, Card, HeadingText, pnlTextClass, MutedText } from '@/components
 import { formatMoney, formatSignedMoney, formatVsYesterdayDelta } from '@/lib/formatMoney'
 import { tscTheme } from '@/lib/tscTheme'
 
+function homeTabIndex(tab: HomeSectionTab): number {
+  const index = HOME_SECTION_TAB_ORDER.indexOf(tab)
+  return index >= 0 ? index : 0
+}
+
 export default function DashboardScreen() {
   const { user } = useAuth()
+  const pagerRef = useRef<PagerView>(null)
   const [homeTab, setHomeTab] = useState<HomeSectionTab>('dashboard')
   const metrics = useDashboardMetrics(user?.id)
   const {
@@ -51,6 +69,16 @@ export default function DashboardScreen() {
     await Promise.all([refresh(), refreshExtras(), refreshCharts({ silent: true })])
   }
 
+  const handleTabPress = useCallback((tab: HomeSectionTab) => {
+    setHomeTab(tab)
+    pagerRef.current?.setPage(homeTabIndex(tab))
+  }, [])
+
+  const handlePageSelected = useCallback((event: NativeSyntheticEvent<{ position: number }>) => {
+    const nextTab = HOME_SECTION_TAB_ORDER[event.nativeEvent.position]
+    if (nextTab) setHomeTab(nextTab)
+  }, [])
+
   const tradesSub =
     analytics.tradesTaken === 0
       ? 'No closed trades today'
@@ -65,25 +93,24 @@ export default function DashboardScreen() {
 
   return (
     <AppScreen title={<TscopierLogo />}>
-      <ScrollView
-        refreshControl={
-          homeTab === 'dashboard' ? (
-            <RefreshControl refreshing={refreshing} onRefresh={() => void onRefresh()} tintColor={tscTheme.primary} />
-          ) : undefined
-        }
-        contentContainerClassName="gap-4 pb-24"
-        showsVerticalScrollIndicator={false}
+      <View className="mb-3">
+        <HomeSectionTabs value={homeTab} onChange={handleTabPress} />
+      </View>
+
+      <PagerView
+        ref={pagerRef}
+        style={{ flex: 1 }}
+        initialPage={0}
+        onPageSelected={handlePageSelected}
       >
-        <HomeSectionTabs value={homeTab} onChange={setHomeTab} />
-
-        {homeTab === 'brokers' ? (
-          <HomeBrokersSection metrics={metrics} />
-        ) : null}
-
-        {homeTab === 'channels' ? <HomeChannelsSection /> : null}
-
-        {homeTab === 'dashboard' ? (
-          <>
+        <View key="dashboard" style={{ flex: 1 }}>
+          <ScrollView
+            refreshControl={
+              <RefreshControl refreshing={refreshing} onRefresh={() => void onRefresh()} tintColor={tscTheme.primary} />
+            }
+            contentContainerClassName="gap-4 pb-24"
+            showsVerticalScrollIndicator={false}
+          >
             {loading && brokers.length === 0 ? (
               <View className="items-center py-16">
                 <ActivityIndicator color={tscTheme.primary} size="large" />
@@ -209,15 +236,28 @@ export default function DashboardScreen() {
                       key={broker.id}
                       broker={broker}
                       live={liveByBroker[broker.id]}
-                      onPress={() => setHomeTab('brokers')}
+                      onPress={() => handleTabPress('brokers')}
                     />
                   ))}
                 </View>
               )}
             </View>
-          </>
-        ) : null}
-      </ScrollView>
+          </ScrollView>
+        </View>
+
+        <View key="brokers" style={{ flex: 1 }}>
+          <ScrollView
+            contentContainerClassName="gap-4 pb-24"
+            showsVerticalScrollIndicator={false}
+          >
+            <HomeBrokersSection metrics={metrics} />
+          </ScrollView>
+        </View>
+
+        <View key="channels" style={{ flex: 1 }}>
+          <HomeChannelsSection />
+        </View>
+      </PagerView>
     </AppScreen>
   )
 }

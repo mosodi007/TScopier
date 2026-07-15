@@ -13,6 +13,8 @@ const TABS: Array<{ id: HomeSectionTab; label: string; icon: LucideIcon }> = [
   { id: 'channels', label: 'Channels', icon: Radio },
 ]
 
+export const HOME_SECTION_TAB_ORDER = TABS.map(tab => tab.id)
+
 interface HomeSectionTabsProps {
   value: HomeSectionTab
   onChange: (tab: HomeSectionTab) => void

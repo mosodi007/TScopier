@@ -74,7 +74,7 @@ export function HomeChannelsSection() {
       refreshControl={
         <RefreshControl refreshing={refreshing} onRefresh={() => void onRefresh()} tintColor={tscTheme.primary} />
       }
-      contentContainerClassName="gap-4"
+      contentContainerClassName="gap-4 pb-24"
       showsVerticalScrollIndicator={false}
     >
       <Card>
