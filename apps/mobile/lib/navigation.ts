@@ -8,7 +8,6 @@ import {
   CreditCard,
   FlaskConical,
   Home,
-  LayoutDashboard,
   LifeBuoy,
   Menu,
   Newspaper,
@@ -51,46 +50,9 @@ export interface MobileNavSection {
 /** Mirrors web sidebar sections — primary tabs excluded from More. */
 export const MOBILE_MORE_SECTIONS: MobileNavSection[] = [
   {
-    id: 'general',
-    title: 'General',
-    items: [
-      {
-        id: 'dashboard',
-        label: 'Home',
-        icon: LayoutDashboard,
-        target: { kind: 'tab', href: '/(app)/(tabs)/dashboard' },
-      },
-      {
-        id: 'trades',
-        label: 'Trades',
-        icon: ChartNoAxesCombined,
-        target: { kind: 'tab', href: '/(app)/(tabs)/trades' },
-      },
-      {
-        id: 'signals',
-        label: 'Signals',
-        icon: SlidersHorizontal,
-        target: { kind: 'tab', href: '/(app)/(tabs)/signals' },
-      },
-    ],
-  },
-  {
     id: 'signals',
     title: 'Signals',
     items: [
-      {
-        id: 'channels',
-        label: 'Channels',
-        icon: Radio,
-        target: { kind: 'tab', href: '/(app)/(tabs)/channels' },
-        description: 'Telegram channels & copier engine',
-      },
-      {
-        id: 'backtest',
-        label: 'Backtest',
-        icon: FlaskConical,
-        target: { kind: 'tab', href: '/(app)/(tabs)/backtest' },
-      },
       {
         id: 'activities',
         label: 'Copier Engine',
@@ -102,12 +64,6 @@ export const MOBILE_MORE_SECTIONS: MobileNavSection[] = [
         label: 'Copier Logs',
         icon: ClipboardList,
         target: { kind: 'stack', href: '/(app)/copier-logs' },
-      },
-      {
-        id: 'signal-history',
-        label: 'Manage Signals',
-        icon: SlidersHorizontal,
-        target: { kind: 'tab', href: '/(app)/(tabs)/signals' },
       },
       {
         id: 'performance',
