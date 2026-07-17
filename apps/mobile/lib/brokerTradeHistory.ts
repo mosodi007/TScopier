@@ -36,23 +36,32 @@ async function ensureFreshAuthSession(): Promise<string> {
   return token
 }
 
+/** Full broker history start (matches web Trades page). */
+export const BROKER_FULL_HISTORY_FROM = '2000-01-01'
+
 /** Pull open positions + closed deal history from linked FxSocket brokers. */
 export async function fetchBrokerMtTrades(opts: {
   brokerId?: string
   historyDays?: number
+  /** When true, request full MT history from 2000-01-01 (Trades page). */
+  fullHistory?: boolean
   limit?: number
   accounts?: readonly BrokerConnectAnchor[]
   includeBalanceCashflow?: boolean
 } = {}): Promise<MtTrade[]> {
   const historyDays = opts.historyDays ?? DASHBOARD_CHART_MT_HISTORY_DAYS
   const { tomorrowStart: historyTo } = getLocalCalendarDayBounds()
-  const historyFrom = opts.accounts?.length
-    ? resolveDashboardMtHistoryFrom(opts.accounts, historyDays)
-    : (() => {
-        const from = new Date()
-        from.setDate(from.getDate() - historyDays)
-        return from
-      })()
+  const historyFromStr = opts.fullHistory
+    ? BROKER_FULL_HISTORY_FROM
+    : formatLocalMtApiDateTime(
+        opts.accounts?.length
+          ? resolveDashboardMtHistoryFrom(opts.accounts, historyDays)
+          : (() => {
+              const from = new Date()
+              from.setDate(from.getDate() - historyDays)
+              return from
+            })(),
+      )
 
   const token = await ensureFreshAuthSession()
   const { ok, data } = await callEdgeFunction<{ trades?: MtTrade[]; error?: string }>(
@@ -65,7 +74,7 @@ export async function fetchBrokerMtTrades(opts: {
         broker_id: opts.brokerId ?? '',
         scope: 'all',
         history_profile: 'trades',
-        history_from: formatLocalMtApiDateTime(historyFrom),
+        history_from: historyFromStr,
         history_to: formatLocalMtApiDateTime(historyTo),
         ...(opts.limit != null && opts.limit > 0 ? { limit: opts.limit } : {}),
         ...(opts.includeBalanceCashflow === false ? { include_balance_cashflow: false } : {}),
