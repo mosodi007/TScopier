@@ -22,11 +22,11 @@ interface HomeSectionTabsProps {
 
 export function HomeSectionTabs({ value, onChange }: HomeSectionTabsProps) {
   const { isDark } = useTheme()
-  const activeColor = isDark ? tscTheme.primaryMuted.dark : tscTheme.primary
+  const activeColor = '#ffffff'
   const inactiveColor = isDark ? tscTheme.textMuted.dark : tscTheme.textMuted.light
   const surfaceColor = isDark ? tscTheme.surface.dark : '#ffffff'
   const borderColor = isDark ? 'rgba(148, 163, 184, 0.18)' : 'rgba(226, 232, 240, 0.95)'
-  const highlightColor = isDark ? 'rgba(4, 47, 46, 0.55)' : '#f0fdfa'
+  const highlightColor = tscTheme.primary
   const activeIndex = TABS.findIndex(tab => tab.id === value)
   const { highlightStyle, onContainerLayout } = useSlidingTabHighlight(
     activeIndex >= 0 ? activeIndex : 0,

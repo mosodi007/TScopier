@@ -1,40 +1,19 @@
-import { useCallback, useEffect, useRef } from 'react'
-import { Platform, Pressable, Text, View, type LayoutChangeEvent } from 'react-native'
+import { Platform, Pressable, Text, View } from 'react-native'
 import type { BottomTabBarProps } from 'expo-router/build/react-navigation/bottom-tabs/types'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
-import Animated, {
-  Easing,
-  useAnimatedStyle,
-  useSharedValue,
-  withTiming,
-} from 'react-native-reanimated'
 import { useTheme } from '@/context/ThemeContext'
+import { SlidingTabHighlight } from '@/components/navigation/SlidingTabHighlight'
 import { TabBarNavIcon } from '@/components/navigation/TabBarNavIcon'
+import { useSlidingTabHighlight } from '@/components/navigation/useSlidingTabHighlight'
 import { TAB_NAV_META, TAB_SCREEN_ORDER } from '@/lib/navigation'
 import { tscTheme } from '@/lib/tscTheme'
 
-const TAB_ORDER = new Set<string>(TAB_SCREEN_ORDER)
-/** Inner padding of the white bar — highlight is measured inside this. */
-const BAR_PAD = 10
-/** Extra inset so the teal pill sits centered inside the tab cell. */
-const HIGHLIGHT_INSET = -4
-
-const TIMING = {
-  duration: 180,
-  easing: Easing.out(Easing.cubic),
-}
-
-interface TabFrame {
-  x: number
-  y: number
-  width: number
-  height: number
-}
+const BAR_PAD = 6
 
 export function FloatingTabBar({ state, navigation }: BottomTabBarProps) {
   const { isDark } = useTheme()
   const insets = useSafeAreaInsets()
-  const bottomOffset = Math.max(insets.bottom, 8)
+  const bottomPad = Math.max(insets.bottom, 8)
 
   const activeColor = '#ffffff'
   const inactiveColor = isDark ? tscTheme.textMuted.dark : tscTheme.textMuted.light
@@ -42,7 +21,10 @@ export function FloatingTabBar({ state, navigation }: BottomTabBarProps) {
   const borderColor = isDark ? 'rgba(148, 163, 184, 0.18)' : 'rgba(226, 232, 240, 0.95)'
   const highlightColor = tscTheme.primary
 
-  const visibleRoutes = state.routes.filter(route => TAB_ORDER.has(route.name))
+  const visibleRoutes = TAB_SCREEN_ORDER.map(name =>
+    state.routes.find(route => route.name === name),
+  ).filter((route): route is (typeof state.routes)[number] => route != null)
+
   const activeVisibleIndex = Math.max(
     0,
     visibleRoutes.findIndex(route => {
@@ -50,77 +32,29 @@ export function FloatingTabBar({ state, navigation }: BottomTabBarProps) {
       return state.index === routeIndex
     }),
   )
-  const activeKey = visibleRoutes[activeVisibleIndex]?.key ?? null
 
-  const framesRef = useRef<Record<string, TabFrame>>({})
-
-  const highlightLeft = useSharedValue(0)
-  const highlightTop = useSharedValue(0)
-  const highlightW = useSharedValue(0)
-  const highlightH = useSharedValue(0)
-  const highlightOpacity = useSharedValue(0)
-
-  const moveHighlightTo = useCallback(
-    (frame: TabFrame) => {
-      if (frame.width <= 0 || frame.height <= 0) return
-      const left = frame.x + HIGHLIGHT_INSET
-      const top = frame.y + HIGHLIGHT_INSET
-      const width = Math.max(0, frame.width - HIGHLIGHT_INSET * 2)
-      const height = Math.max(0, frame.height - HIGHLIGHT_INSET * 2)
-
-      highlightLeft.value = withTiming(left, TIMING)
-      highlightTop.value = withTiming(top, TIMING)
-      highlightW.value = withTiming(width, TIMING)
-      highlightH.value = withTiming(height, TIMING)
-      highlightOpacity.value = withTiming(1, { duration: 120 })
-    },
-    [highlightH, highlightLeft, highlightOpacity, highlightTop, highlightW],
-  )
-
-  useEffect(() => {
-    if (!activeKey) return
-    const frame = framesRef.current[activeKey]
-    if (frame) moveHighlightTo(frame)
-  }, [activeKey, moveHighlightTo])
-
-  const onTabLayout = useCallback(
-    (key: string, event: LayoutChangeEvent) => {
-      const { x, y, width, height } = event.nativeEvent.layout
-      const next = { x, y, width, height }
-      framesRef.current[key] = next
-      if (key === activeKey) {
-        moveHighlightTo(next)
-      }
-    },
-    [activeKey, moveHighlightTo],
-  )
-
-  const highlightStyle = useAnimatedStyle(() => ({
-    opacity: highlightOpacity.value,
-    left: highlightLeft.value,
-    top: highlightTop.value,
-    width: highlightW.value,
-    height: highlightH.value,
-  }))
+  const { highlightStyle, onContainerLayout } = useSlidingTabHighlight(activeVisibleIndex, {
+    tabCount: visibleRoutes.length,
+    gap: 0,
+    inset: BAR_PAD,
+  })
 
   return (
     <View
       pointerEvents="box-none"
       style={{
-        position: 'absolute',
-        left: 0,
-        right: 0,
-        bottom: 0,
-        width: '100%',
         paddingHorizontal: 16,
-        paddingBottom: bottomOffset,
+        paddingBottom: bottomPad,
+        paddingTop: 8,
+        backgroundColor: 'transparent',
       }}
     >
       <View
+        onLayout={onContainerLayout}
         style={{
-          width: '100%',
+          position: 'relative',
           flexDirection: 'row',
-          alignItems: 'stretch',
+          width: '100%',
           borderRadius: 28,
           borderWidth: 1,
           borderColor,
@@ -136,18 +70,7 @@ export function FloatingTabBar({ state, navigation }: BottomTabBarProps) {
             : { elevation: 14 }),
         }}
       >
-        <Animated.View
-          pointerEvents="none"
-          style={[
-            {
-              position: 'absolute',
-              zIndex: 0,
-              borderRadius: 20,
-              backgroundColor: highlightColor,
-            },
-            highlightStyle,
-          ]}
-        />
+        <SlidingTabHighlight color={highlightColor} borderRadius={22} style={highlightStyle} />
 
         {visibleRoutes.map(route => {
           const routeIndex = state.routes.findIndex(r => r.key === route.key)
@@ -155,20 +78,11 @@ export function FloatingTabBar({ state, navigation }: BottomTabBarProps) {
           const meta = TAB_NAV_META[route.name as keyof typeof TAB_NAV_META]
           if (!meta) return null
 
-          const Icon = meta.icon
           const color = focused ? activeColor : inactiveColor
 
           return (
-            <View
-              key={route.key}
-              onLayout={e => onTabLayout(route.key, e)}
-              style={{
-                flexGrow: 1,
-                flexShrink: 1,
-                flexBasis: 0,
-                zIndex: 1,
-              }}
-            >
+            // Layout MUST live on View — Pressable function-styles drop width/flex (NativeWind).
+            <View key={route.key} style={{ flex: 1, zIndex: 1 }}>
               <Pressable
                 accessibilityRole="button"
                 accessibilityState={focused ? { selected: true } : {}}
@@ -179,9 +93,8 @@ export function FloatingTabBar({ state, navigation }: BottomTabBarProps) {
                     target: route.key,
                     canPreventDefault: true,
                   })
-                  if (!focused && !event.defaultPrevented) {
-                    navigation.navigate(route.name, route.params)
-                  }
+                  if (event.defaultPrevented) return
+                  navigation.navigate(route.name, route.params)
                 }}
                 onLongPress={() => {
                   navigation.emit({
@@ -190,18 +103,18 @@ export function FloatingTabBar({ state, navigation }: BottomTabBarProps) {
                   })
                 }}
                 style={({ pressed }) => ({
-                  flex: 1,
                   alignItems: 'center',
                   justifyContent: 'center',
-                  // paddingVertical: 10,
-                  opacity: pressed ? 0.82 : 1,
+                  paddingVertical: 10,
+                  opacity: pressed ? 0.88 : 1,
                 })}
               >
-                <TabBarNavIcon icon={Icon} color={color} size={24} />
+                <TabBarNavIcon icon={meta.icon} color={color} size={22} />
                 <Text
                   numberOfLines={1}
                   style={{
                     marginTop: 2,
+                    width: '100%',
                     fontSize: 9,
                     fontWeight: '600',
                     color,

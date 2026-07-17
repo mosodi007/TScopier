@@ -24,7 +24,7 @@ export default function AppLayout() {
     <Stack
       screenOptions={{
         headerShown: false,
-        freezeOnBlur: true,
+        freezeOnBlur: false,
         contentStyle: { backgroundColor: pageBackground(isDark) },
       }}
     >

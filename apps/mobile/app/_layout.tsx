@@ -4,11 +4,7 @@ import { Stack } from 'expo-router'
 import * as SplashScreen from 'expo-splash-screen'
 import { useEffect } from 'react'
 import { StatusBar } from 'expo-status-bar'
-import { enableFreeze } from 'react-native-screens'
 import { SafeAreaProvider } from 'react-native-safe-area-context'
-
-/** Freeze inactive native screens so background tabs stop re-rendering. */
-enableFreeze(true)
 import {
   InstrumentSans_400Regular,
   InstrumentSans_500Medium,
