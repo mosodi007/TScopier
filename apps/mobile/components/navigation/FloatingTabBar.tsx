@@ -14,6 +14,10 @@ import { TAB_NAV_META, TAB_SCREEN_ORDER } from '@/lib/navigation'
 import { tscTheme } from '@/lib/tscTheme'
 
 const TAB_ORDER = new Set<string>(TAB_SCREEN_ORDER)
+/** Inner padding of the white bar — highlight is measured inside this. */
+const BAR_PAD = 10
+/** Extra inset so the teal pill sits centered inside the tab cell. */
+const HIGHLIGHT_INSET = -4
 
 const TIMING = {
   duration: 180,
@@ -50,8 +54,8 @@ export function FloatingTabBar({ state, navigation }: BottomTabBarProps) {
 
   const framesRef = useRef<Record<string, TabFrame>>({})
 
-  const highlightX = useSharedValue(0)
-  const highlightY = useSharedValue(0)
+  const highlightLeft = useSharedValue(0)
+  const highlightTop = useSharedValue(0)
   const highlightW = useSharedValue(0)
   const highlightH = useSharedValue(0)
   const highlightOpacity = useSharedValue(0)
@@ -59,13 +63,18 @@ export function FloatingTabBar({ state, navigation }: BottomTabBarProps) {
   const moveHighlightTo = useCallback(
     (frame: TabFrame) => {
       if (frame.width <= 0 || frame.height <= 0) return
-      highlightX.value = withTiming(frame.x, TIMING)
-      highlightY.value = withTiming(frame.y, TIMING)
-      highlightW.value = withTiming(frame.width, TIMING)
-      highlightH.value = withTiming(frame.height, TIMING)
+      const left = frame.x + HIGHLIGHT_INSET
+      const top = frame.y + HIGHLIGHT_INSET
+      const width = Math.max(0, frame.width - HIGHLIGHT_INSET * 2)
+      const height = Math.max(0, frame.height - HIGHLIGHT_INSET * 2)
+
+      highlightLeft.value = withTiming(left, TIMING)
+      highlightTop.value = withTiming(top, TIMING)
+      highlightW.value = withTiming(width, TIMING)
+      highlightH.value = withTiming(height, TIMING)
       highlightOpacity.value = withTiming(1, { duration: 120 })
     },
-    [highlightH, highlightOpacity, highlightW, highlightX, highlightY],
+    [highlightH, highlightLeft, highlightOpacity, highlightTop, highlightW],
   )
 
   useEffect(() => {
@@ -88,7 +97,8 @@ export function FloatingTabBar({ state, navigation }: BottomTabBarProps) {
 
   const highlightStyle = useAnimatedStyle(() => ({
     opacity: highlightOpacity.value,
-    transform: [{ translateX: highlightX.value }, { translateY: highlightY.value }],
+    left: highlightLeft.value,
+    top: highlightTop.value,
     width: highlightW.value,
     height: highlightH.value,
   }))
@@ -115,7 +125,7 @@ export function FloatingTabBar({ state, navigation }: BottomTabBarProps) {
           borderWidth: 1,
           borderColor,
           backgroundColor: surfaceColor,
-          padding: 4,
+          padding: BAR_PAD,
           ...(Platform.OS === 'ios'
             ? {
                 shadowColor: '#000',
@@ -131,10 +141,8 @@ export function FloatingTabBar({ state, navigation }: BottomTabBarProps) {
           style={[
             {
               position: 'absolute',
-              left: 0,
-              top: 0,
               zIndex: 0,
-              borderRadius: 22,
+              borderRadius: 20,
               backgroundColor: highlightColor,
             },
             highlightStyle,
@@ -155,7 +163,9 @@ export function FloatingTabBar({ state, navigation }: BottomTabBarProps) {
               key={route.key}
               onLayout={e => onTabLayout(route.key, e)}
               style={{
-                flex: 1,
+                flexGrow: 1,
+                flexShrink: 1,
+                flexBasis: 0,
                 zIndex: 1,
               }}
             >
@@ -183,11 +193,11 @@ export function FloatingTabBar({ state, navigation }: BottomTabBarProps) {
                   flex: 1,
                   alignItems: 'center',
                   justifyContent: 'center',
-                  paddingVertical: 8,
+                  // paddingVertical: 10,
                   opacity: pressed ? 0.82 : 1,
                 })}
               >
-                <TabBarNavIcon icon={Icon} color={color} size={20} />
+                <TabBarNavIcon icon={Icon} color={color} size={24} />
                 <Text
                   numberOfLines={1}
                   style={{
