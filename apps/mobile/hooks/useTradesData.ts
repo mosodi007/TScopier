@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { InteractionManager } from 'react-native'
 import type { BrokerAccount } from '@tscopier/shared'
 import { supabase } from '@/lib/supabase'
 import { isFxsocketLinkedBroker } from '@/lib/brokerLink'
@@ -10,6 +11,7 @@ import { filterMtTradesSinceConnect } from '@/lib/tradesSinceConnect'
 import type { MtTrade } from '@/lib/mtTrade'
 import { parseMtHistoryTimestamp } from '@/lib/mtApiDateTime'
 import { useDashboardRealtime } from '@/hooks/useDashboardRealtime'
+import { useScreenActive } from '@/hooks/useScreenActive'
 
 function tradeActivityMs(trade: MtTrade): number {
   if (trade.status === 'closed') {
@@ -27,6 +29,7 @@ function sortTradesNewestFirst(trades: MtTrade[]): MtTrade[] {
 }
 
 export function useTradesData(userId: string | undefined) {
+  const active = useScreenActive()
   const [trades, setTrades] = useState<MtTrade[]>([])
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
@@ -34,6 +37,8 @@ export function useTradesData(userId: string | undefined) {
   const [lastSyncedAt, setLastSyncedAt] = useState<number | null>(null)
   const inflightRef = useRef(false)
   const hasLoadedRef = useRef(false)
+  const activeRef = useRef(active)
+  activeRef.current = active
 
   const load = useCallback(
     async (opts?: { force?: boolean; background?: boolean }) => {
@@ -70,6 +75,10 @@ export function useTradesData(userId: string | undefined) {
           limit: DASHBOARD_MT_HISTORY_LIMIT,
           includeBalanceCashflow: false,
         })
+        if (!activeRef.current && hasLoadedRef.current) {
+          // Screen blurred mid-fetch — keep previous data if we already had some.
+          return
+        }
         const filtered = filterMtTradesSinceConnect(raw, linked)
         setTrades(sortTradesNewestFirst(filtered))
         setError(null)
@@ -96,12 +105,30 @@ export function useTradesData(userId: string | undefined) {
       hasLoadedRef.current = false
       return
     }
-    void load()
-  }, [userId, load])
+    if (!active) return
 
-  useDashboardRealtime(userId, () => {
-    void load({ background: true, force: true })
-  })
+    let cancelled = false
+    const task = InteractionManager.runAfterInteractions(() => {
+      if (cancelled) return
+      void load({ background: hasLoadedRef.current })
+    })
+
+    return () => {
+      cancelled = true
+      task.cancel?.()
+    }
+  }, [userId, active, load])
+
+  useDashboardRealtime(
+    userId,
+    () => {
+      if (!activeRef.current) return
+      void load({ background: true, force: true })
+    },
+    undefined,
+    'trades',
+    active,
+  )
 
   return {
     trades,

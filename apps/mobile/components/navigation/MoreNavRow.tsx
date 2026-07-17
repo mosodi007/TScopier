@@ -9,7 +9,8 @@ import { cn } from '@/lib/cn'
 
 async function navigateTarget(target: MobileNavTarget) {
   if (target.kind === 'tab' || target.kind === 'stack') {
-    router.push(target.href as never)
+    // navigate avoids stacking duplicate tab/stack entries (push felt laggy).
+    router.navigate(target.href as never)
     return
   }
   if (target.kind === 'web') {

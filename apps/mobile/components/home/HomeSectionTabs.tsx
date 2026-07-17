@@ -30,7 +30,7 @@ export function HomeSectionTabs({ value, onChange }: HomeSectionTabsProps) {
   const activeIndex = TABS.findIndex(tab => tab.id === value)
   const { highlightStyle, onContainerLayout } = useSlidingTabHighlight(
     activeIndex >= 0 ? activeIndex : 0,
-    { tabCount: TABS.length, gap: 4 },
+    { tabCount: TABS.length, gap: 4, inset: 4 },
   )
 
   return (

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import { InteractionManager } from 'react-native'
 import type { Signal } from '@tscopier/shared'
 import {
   formatTradeSignalSummary,
@@ -8,6 +9,7 @@ import {
   type TradeSignalSummaryLabels,
 } from '@tscopier/web-lib/copierLogDisplay'
 import { supabase } from '@/lib/supabase'
+import { useScreenActive } from '@/hooks/useScreenActive'
 
 export type SignalDatePreset = 'all' | 'today' | '7d' | '30d' | 'custom'
 
@@ -141,6 +143,7 @@ export function useManageSignals(
     dateTo: string
   },
 ) {
+  const active = useScreenActive()
   const [rows, setRows] = useState<ManageSignalRow[]>([])
   const [channels, setChannels] = useState<SignalChannelOption[]>([])
   const [stats, setStats] = useState<ManageSignalStats>({
@@ -262,8 +265,17 @@ export function useManageSignals(
   }, [userId])
 
   useEffect(() => {
-    void load()
-  }, [load])
+    if (!active) return
+    let cancelled = false
+    const task = InteractionManager.runAfterInteractions(() => {
+      if (cancelled) return
+      void load()
+    })
+    return () => {
+      cancelled = true
+      task.cancel?.()
+    }
+  }, [load, active])
 
   const filteredRows = useMemo(() => {
     return rows.filter(row => {

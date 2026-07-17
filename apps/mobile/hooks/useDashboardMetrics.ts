@@ -3,6 +3,7 @@ import type { BrokerAccount } from '@tscopier/shared'
 import { supabase } from '@/lib/supabase'
 import { useDashboardRealtime } from '@/hooks/useDashboardRealtime'
 import { useFxsocketStream } from '@/hooks/useFxsocketStream'
+import { useScreenActive } from '@/hooks/useScreenActive'
 import { resolveFxsocketFloatingOpenPnl } from '@/lib/fxsocketStreamParse'
 import {
   computeAggregateMetrics,
@@ -26,6 +27,7 @@ export interface DashboardMetricsState {
 }
 
 export function useDashboardMetrics(userId: string | undefined): DashboardMetricsState {
+  const active = useScreenActive()
   const [brokers, setBrokers] = useState<BrokerAccount[]>([])
   const [liveByBroker, setLiveByBroker] = useState<Record<string, BrokerLiveSnapshot>>({})
   const [activeChannels, setActiveChannels] = useState(0)
@@ -96,47 +98,57 @@ export function useDashboardMetrics(userId: string | undefined): DashboardMetric
     void loadAll().finally(() => setLoading(false))
   }, [userId, loadAll])
 
-  useDashboardRealtime(userId, loadAll, broker => {
-    setBrokers(prev => prev.map(b => (b.id === broker.id ? { ...b, ...broker } : b)))
-  })
-
-  useFxsocketStream(brokers, {
-    onAccount: (brokerId, data) => {
-      setLiveByBroker(prev => {
-        const current = prev[brokerId] ?? {}
-        const openTrades = current.openTrades ?? 0
-        const accountOpenPnl = resolveFxsocketFloatingOpenPnl(data, openTrades)
-        const openPnl =
-          openTrades > 0 && current.openPnl != null && accountOpenPnl === 0
-            ? current.openPnl
-            : accountOpenPnl ?? current.openPnl
-
-        return {
-          ...prev,
-          [brokerId]: {
-            ...current,
-            balance: data.balance ?? current.balance,
-            equity: data.equity ?? current.equity,
-            openPnl,
-            currency: data.currency ?? current.currency,
-          },
-        }
-      })
+  useDashboardRealtime(
+    userId,
+    loadAll,
+    broker => {
+      setBrokers(prev => prev.map(b => (b.id === broker.id ? { ...b, ...broker } : b)))
     },
-    onPositions: (brokerId, data) => {
-      setLiveByBroker(prev => {
-        const current = prev[brokerId] ?? {}
-        return {
-          ...prev,
-          [brokerId]: {
-            ...current,
-            openTrades: data.openTrades,
-            openPnl: data.openPnl ?? current.openPnl,
-          },
-        }
-      })
+    'main',
+    active,
+  )
+
+  useFxsocketStream(
+    brokers,
+    {
+      onAccount: (brokerId, data) => {
+        setLiveByBroker(prev => {
+          const current = prev[brokerId] ?? {}
+          const openTrades = current.openTrades ?? 0
+          const accountOpenPnl = resolveFxsocketFloatingOpenPnl(data, openTrades)
+          const openPnl =
+            openTrades > 0 && current.openPnl != null && accountOpenPnl === 0
+              ? current.openPnl
+              : accountOpenPnl ?? current.openPnl
+
+          return {
+            ...prev,
+            [brokerId]: {
+              ...current,
+              balance: data.balance ?? current.balance,
+              equity: data.equity ?? current.equity,
+              openPnl,
+              currency: data.currency ?? current.currency,
+            },
+          }
+        })
+      },
+      onPositions: (brokerId, data) => {
+        setLiveByBroker(prev => {
+          const current = prev[brokerId] ?? {}
+          return {
+            ...prev,
+            [brokerId]: {
+              ...current,
+              openTrades: data.openTrades,
+              openPnl: data.openPnl ?? current.openPnl,
+            },
+          }
+        })
+      },
     },
-  })
+    active,
+  )
 
   const refresh = useCallback(async () => {
     setRefreshing(true)

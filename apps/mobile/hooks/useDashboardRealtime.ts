@@ -22,6 +22,7 @@ export function useDashboardRealtime(
   onDataChange: () => void,
   onBrokerPatch?: (broker: BrokerAccount) => void,
   scope = 'main',
+  enabled = true,
 ): void {
   const onChangeRef = useRef(onDataChange)
   onChangeRef.current = onDataChange
@@ -30,7 +31,7 @@ export function useDashboardRealtime(
   const generationRef = useRef(0)
 
   useEffect(() => {
-    if (!userId) return
+    if (!userId || !enabled) return
 
     const generation = ++generationRef.current
     let debounceTimer: ReturnType<typeof setTimeout> | null = null
@@ -83,5 +84,5 @@ export function useDashboardRealtime(
       }
       removeChannelsForTopic(topic)
     }
-  }, [userId, scope])
+  }, [userId, scope, enabled])
 }

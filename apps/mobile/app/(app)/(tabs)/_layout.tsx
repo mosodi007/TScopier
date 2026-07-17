@@ -9,8 +9,14 @@ export default function TabLayout() {
       screenOptions={{
         headerShown: false,
         tabBarShowLabel: false,
+        lazy: true,
+        freezeOnBlur: true,
         tabBarStyle: {
           position: 'absolute',
+          left: 0,
+          right: 0,
+          bottom: 0,
+          height: 'auto',
           backgroundColor: 'transparent',
           borderTopWidth: 0,
           elevation: 0,

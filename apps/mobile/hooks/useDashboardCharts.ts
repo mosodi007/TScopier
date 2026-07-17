@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { InteractionManager } from 'react-native'
 import type { BrokerAccount } from '@tscopier/shared'
 import { supabase } from '@/lib/supabase'
 import { isFxsocketLinkedBroker } from '@/lib/brokerLink'
@@ -20,6 +21,7 @@ import {
   type DashboardChartTrade,
   type TradeVolumeDay,
 } from '@/lib/dashboardCharts'
+import { useScreenActive } from '@/hooks/useScreenActive'
 
 interface DbTradeRow {
   id: string
@@ -58,6 +60,7 @@ export function useDashboardCharts(
   userId: string | undefined,
   brokers: BrokerAccount[] = [],
 ) {
+  const active = useScreenActive()
   const [tradeVolume7Day, setTradeVolume7Day] = useState<TradeVolumeDay[]>([])
   const [channelProfit7d, setChannelProfit7d] = useState<ChannelProfitRow[]>([])
   const [analytics, setAnalytics] = useState<DashboardAnalytics>(() =>
@@ -207,8 +210,17 @@ export function useDashboardCharts(
   )
 
   useEffect(() => {
-    void load({ silent: hasLoadedOnceRef.current })
-  }, [userId, scopeKey, hasMtBroker, load])
+    if (!active) return
+    let cancelled = false
+    const task = InteractionManager.runAfterInteractions(() => {
+      if (cancelled) return
+      void load({ silent: hasLoadedOnceRef.current })
+    })
+    return () => {
+      cancelled = true
+      task.cancel?.()
+    }
+  }, [userId, scopeKey, hasMtBroker, load, active])
 
   const refreshCharts = useCallback(
     (opts?: { silent?: boolean }) => load(opts),

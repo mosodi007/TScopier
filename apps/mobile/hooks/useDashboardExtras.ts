@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
+import { InteractionManager } from 'react-native'
 import { supabase } from '@/lib/supabase'
 import {
   buildChannelDisplayNames,
@@ -9,6 +10,7 @@ import {
   type CopierEngineListItem,
   type TradeActivityLogRow,
 } from '@/lib/copierEngineActivities'
+import { useScreenActive } from '@/hooks/useScreenActive'
 
 export interface CopierLogRow {
   id: string
@@ -34,6 +36,7 @@ function buildChannelNames(
 }
 
 export function useDashboardExtras(userId: string | undefined) {
+  const active = useScreenActive()
   const [copierLogs, setCopierLogs] = useState<CopierLogRow[]>([])
   const [copierEngineActivities, setCopierEngineActivities] = useState<CopierEngineListItem[]>([])
 
@@ -83,8 +86,17 @@ export function useDashboardExtras(userId: string | undefined) {
   }, [userId])
 
   useEffect(() => {
-    void load()
-  }, [load])
+    if (!active) return
+    let cancelled = false
+    const task = InteractionManager.runAfterInteractions(() => {
+      if (cancelled) return
+      void load()
+    })
+    return () => {
+      cancelled = true
+      task.cancel?.()
+    }
+  }, [load, active])
 
   return { copierLogs, copierEngineActivities, refreshExtras: load }
 }
