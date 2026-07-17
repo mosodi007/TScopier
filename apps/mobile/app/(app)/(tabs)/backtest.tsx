@@ -94,11 +94,7 @@ export default function BacktestScreen() {
   }, [flow.trades.length])
 
   return (
-    <AppScreen
-      title="Backtest"
-      subtitle="Test signal strategies on historical broker data"
-      noPadding
-    >
+    <AppScreen pageTitle="Backtest" noPadding>
       <View className="mb-3 flex-row items-center justify-end">
         <Pressable
           onPress={() => setHistoryOpen(true)}

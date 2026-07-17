@@ -14,21 +14,10 @@ import { tscTheme } from '@/lib/tscTheme'
 
 type Filter = 'all' | 'open' | 'closed'
 
-function formatRelative(ts: number): string {
-  const diff = Math.max(0, Date.now() - ts)
-  const sec = Math.floor(diff / 1000)
-  if (sec < 5) return 'just now'
-  if (sec < 60) return `${sec}s ago`
-  const min = Math.floor(sec / 60)
-  if (min < 60) return `${min}m ago`
-  const hr = Math.floor(min / 60)
-  return `${hr}h ago`
-}
-
 export default function TradesScreen() {
   const { user } = useAuth()
   const { isDark } = useTheme()
-  const { trades, loading, refreshing, error, lastSyncedAt, refresh } = useTradesData(user?.id)
+  const { trades, loading, refreshing, error, refresh } = useTradesData(user?.id)
   const [filter, setFilter] = useState<Filter>('all')
   const [selectedTrade, setSelectedTrade] = useState<MtTrade | null>(null)
 
@@ -58,12 +47,9 @@ export default function TradesScreen() {
   const showEmpty = !loading && !showInitialSkeleton && visibleTrades.length === 0
   const showListChrome = showInitialSkeleton || visibleTrades.length > 0
   const iconColor = isDark ? tscTheme.textMuted.dark : tscTheme.textMuted.light
-  const subtitle = lastSyncedAt
-    ? `Live positions and recent closes · synced ${formatRelative(lastSyncedAt)}`
-    : 'Live positions and recent closes from your linked broker accounts'
 
   return (
-    <AppScreen title="Trades" subtitle={subtitle} noPadding>
+    <AppScreen pageTitle="Trades" noPadding>
       <View className="mb-3 flex-row items-center gap-2">
         <Pressable
           onPress={refresh}

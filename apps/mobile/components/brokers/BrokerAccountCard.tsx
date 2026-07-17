@@ -2,6 +2,7 @@ import { ActivityIndicator, Alert, Pressable, Switch, Text, View } from 'react-n
 import type { BrokerAccount } from '@tscopier/shared'
 import { ChevronRight, Trash2 } from 'lucide-react-native'
 import { BrokerBadge } from '@/components/brokers/BrokerBadge'
+import { PlatformLogo } from '@/components/brokers/PlatformLogo'
 import { cn } from '@/lib/cn'
 import type { BrokerChannelOption } from '@/lib/brokerListFilters'
 import { getBrokerSignalChannelsLabel, resolveBrokerFilterLabel } from '@/lib/brokerListFilters'
@@ -76,11 +77,7 @@ export function BrokerAccountCard({
     >
       <View className="gap-3 p-4">
         <View className="flex-row items-start gap-3">
-          <View className="h-11 w-11 items-center justify-center rounded-xl bg-teal-50 dark:bg-teal-950/60">
-            <Text className="text-xs font-bold text-teal-700 dark:text-teal-400">
-              {(broker.platform ?? 'MT').toUpperCase().slice(0, 3)}
-            </Text>
-          </View>
+          <PlatformLogo platform={broker.platform} size={44} />
 
           <View className="min-w-0 flex-1">
             <View className="flex-row flex-wrap items-center gap-1.5">

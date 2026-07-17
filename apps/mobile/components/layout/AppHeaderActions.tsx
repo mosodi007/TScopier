@@ -10,10 +10,14 @@ interface AppHeaderActionsProps {
   onMenuOpen?: () => void
 }
 
+/** Fixed action cluster — same size/spacing on every screen. */
 const rowStyle: ViewStyle = {
   flexDirection: 'row',
   alignItems: 'center',
-  gap: 4,
+  justifyContent: 'flex-end',
+  gap: 14,
+  height: 40,
+  flexShrink: 0,
 }
 
 export function AppHeaderActions({ onMenuOpen }: AppHeaderActionsProps) {
@@ -28,7 +32,7 @@ export function AppHeaderActions({ onMenuOpen }: AppHeaderActionsProps) {
 
   return (
     <>
-      <View style={rowStyle} className="shrink-0">
+      <View style={rowStyle} accessibilityRole="toolbar">
         <NotificationBellButton />
         <ProfileMenuTrigger user={user} profile={profile} onPress={openMenu} />
       </View>

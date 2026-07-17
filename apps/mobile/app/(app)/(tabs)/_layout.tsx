@@ -1,6 +1,6 @@
 import { Tabs } from 'expo-router'
 import { FloatingTabBar } from '@/components/navigation/FloatingTabBar'
-import { TAB_NAV_META, TAB_SCREEN_ORDER } from '@/lib/navigation'
+import { HIDDEN_TAB_SCREENS, TAB_NAV_META, TAB_SCREEN_ORDER } from '@/lib/navigation'
 
 export default function TabLayout() {
   return (
@@ -11,7 +11,6 @@ export default function TabLayout() {
         tabBarShowLabel: false,
         lazy: true,
         freezeOnBlur: true,
-        // Let content scroll under the floating bar; the bar sizes itself.
         tabBarStyle: {
           position: 'absolute',
           left: 0,
@@ -36,8 +35,16 @@ export default function TabLayout() {
           />
         )
       })}
-      <Tabs.Screen name="brokers" options={{ href: null }} />
-      <Tabs.Screen name="channels" options={{ href: null }} />
+      {HIDDEN_TAB_SCREENS.map(name => (
+        <Tabs.Screen
+          key={name}
+          name={name}
+          options={{
+            href: null,
+            title: TAB_NAV_META[name].label,
+          }}
+        />
+      ))}
     </Tabs>
   )
 }

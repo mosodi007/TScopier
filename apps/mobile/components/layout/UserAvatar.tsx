@@ -66,6 +66,7 @@ export function ProfileMenuTrigger({ user, profile, onPress }: ProfileMenuTrigge
     <Pressable
       onPress={onPress}
       hitSlop={8}
+      style={{ width: 36, height: 36, alignItems: 'center', justifyContent: 'center' }}
       className="shrink-0 rounded-full active:opacity-80"
       accessibilityLabel="Open profile menu"
     >

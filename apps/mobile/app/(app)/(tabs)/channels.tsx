@@ -1,9 +1,9 @@
-import { AppScreen } from '@/components/layout/AppScreen'
 import { ChannelsPanel } from '@/components/home/ChannelsPanel'
+import { AppScreen } from '@/components/layout/AppScreen'
 
 export default function ChannelsScreen() {
   return (
-    <AppScreen title="Channels" subtitle="Manage which Telegram channels you're monitoring">
+    <AppScreen pageTitle="Channels">
       <ChannelsPanel />
     </AppScreen>
   )

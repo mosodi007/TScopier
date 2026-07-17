@@ -6,7 +6,7 @@ import { Card, MutedText } from '@/components/ui'
 
 export default function MoreScreen() {
   return (
-    <AppScreen title="More" subtitle="All app sections from the web sidebar">
+    <AppScreen pageTitle="More">
       <ScrollView
         className="flex-1"
         contentContainerStyle={{ flexGrow: 1, paddingBottom: 96 }}
@@ -14,10 +14,10 @@ export default function MoreScreen() {
       >
         <Card className="mb-5 bg-teal-50 dark:bg-teal-950/30">
           <Text className="text-sm font-medium text-teal-800 dark:text-teal-200">
-            Primary sections are in the tab bar. Alerts are in the bell icon. Web-only pages open in your browser.
+            Home, Brokers, Channels, and Signals are in the tab bar. Trades and Backtest are listed below.
           </Text>
           <MutedText className="mt-1 text-xs">
-            Tap any item below to navigate.
+            Tap any item to navigate. Web-only pages open in your browser.
           </MutedText>
         </Card>
 

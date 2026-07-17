@@ -1,14 +1,29 @@
 import { View } from 'react-native'
-import { AppHeaderActions } from '@/components/layout/AppHeaderActions'
-import { Screen, Subtitle, Title } from '@/components/ui'
+import { TscopierLogo } from '@/components/branding/TscopierLogo'
+import { AppHeader } from '@/components/layout/AppHeader'
+import { HomeSectionTitle } from '@/components/home/HomeSectionTitle'
+import { Screen } from '@/components/ui'
 import { cn } from '@/lib/cn'
 
 interface AppScreenProps {
+  /**
+   * Top-bar title. Prefer leaving unset on tab screens so the brand logo is shown.
+   * Pass a custom node only when you need to override the logo.
+   */
   title?: React.ReactNode
+  /** @deprecated Prefer `pageSubtitle` under the page title. Kept for rare header-only cases. */
   subtitle?: string
+  /** Page heading below the brand header (Dashboard-style left title). */
+  pageTitle?: string
+  pageSubtitle?: string
+  pageAction?: React.ReactNode
   children: React.ReactNode
   /** Hide top header actions (e.g. auth screens). */
   hideHeaderActions?: boolean
+  /** Optional control before avatar/bell (e.g. add button). */
+  headerTrailing?: React.ReactNode
+  /** When true (default), show TScopier logo in the top bar unless `title` is set. */
+  showBrandLogo?: boolean
   className?: string
   noPadding?: boolean
 }
@@ -16,26 +31,34 @@ interface AppScreenProps {
 export function AppScreen({
   title,
   subtitle,
+  pageTitle,
+  pageSubtitle,
+  pageAction,
   children,
   hideHeaderActions = false,
+  headerTrailing,
+  showBrandLogo = true,
   className,
   noPadding = false,
 }: AppScreenProps) {
-  const hasHeader = Boolean(title || subtitle || !hideHeaderActions)
+  const headerTitle = title ?? (showBrandLogo ? <TscopierLogo /> : undefined)
+  const hasHeader = Boolean(headerTitle || subtitle || !hideHeaderActions || headerTrailing)
 
   return (
     <Screen className={cn(noPadding && 'px-0', className)}>
       {hasHeader ? (
-        <View className={cn('mb-3 flex-row items-center justify-between gap-3', noPadding && 'px-4')}>
-          <View className="min-w-0 flex-1">
-            {title != null
-              ? typeof title === 'string'
-                ? <Title>{title}</Title>
-                : title
-              : null}
-            {subtitle ? <Subtitle>{subtitle}</Subtitle> : null}
-          </View>
-          {!hideHeaderActions ? <AppHeaderActions /> : null}
+        <AppHeader
+          title={headerTitle}
+          subtitle={subtitle}
+          trailing={headerTrailing}
+          showActions={!hideHeaderActions}
+          className={noPadding ? 'px-4' : undefined}
+        />
+      ) : null}
+
+      {pageTitle ? (
+        <View className={cn(noPadding && 'px-4')}>
+          <HomeSectionTitle title={pageTitle} subtitle={pageSubtitle} action={pageAction} />
         </View>
       ) : null}
 

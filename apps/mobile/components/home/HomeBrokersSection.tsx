@@ -7,6 +7,7 @@ import { useAuth } from '@/context/AuthContext'
 import { BrokerAccountCard } from '@/components/brokers/BrokerAccountCard'
 import { BrokerTabToolbar } from '@/components/brokers/BrokerTabToolbar'
 import { HomeSectionTitle } from '@/components/home/HomeSectionTitle'
+import { FloatingActionButton } from '@/components/layout/FloatingActionButton'
 import { Button, Card, HeadingText, MutedText } from '@/components/ui'
 import type { DashboardMetricsState } from '@/hooks/useDashboardMetrics'
 import {
@@ -19,9 +20,11 @@ import { tscTheme } from '@/lib/tscTheme'
 
 interface HomeBrokersSectionProps {
   metrics: Pick<DashboardMetricsState, 'brokers' | 'liveByBroker' | 'loading' | 'refreshing' | 'refresh'>
+  /** When false, omit the in-section title (parent screen already titles the page). */
+  showTitle?: boolean
 }
 
-export function HomeBrokersSection({ metrics }: HomeBrokersSectionProps) {
+export function HomeBrokersSection({ metrics, showTitle = true }: HomeBrokersSectionProps) {
   const { user } = useAuth()
   const { brokers, liveByBroker, loading, refresh } = metrics
   const [searchQuery, setSearchQuery] = useState('')
@@ -85,19 +88,30 @@ export function HomeBrokersSection({ metrics }: HomeBrokersSectionProps) {
 
   return (
     <View className="flex-1">
-      <HomeSectionTitle
-        title="Brokers"
-        action={
+      {showTitle ? (
+        <HomeSectionTitle
+          title="Brokers"
+          action={
+            <BrokerTabToolbar
+              searchQuery={searchQuery}
+              onSearchQueryChange={setSearchQuery}
+              brokerFilter={brokerFilter}
+              onBrokerFilterChange={setBrokerFilter}
+              brokerFilterOptions={brokerFilterOptions}
+            />
+          }
+        />
+      ) : (
+        <View className="mb-3">
           <BrokerTabToolbar
             searchQuery={searchQuery}
             onSearchQueryChange={setSearchQuery}
             brokerFilter={brokerFilter}
             onBrokerFilterChange={setBrokerFilter}
             brokerFilterOptions={brokerFilterOptions}
-            onAddAccount={() => router.push('/(app)/broker-connect')}
           />
-        }
-      />
+        </View>
+      )}
 
       <ScrollView style={{ flex: 1 }} contentContainerClassName="gap-4 pb-24" showsVerticalScrollIndicator={false}>
         <Text className="text-sm font-medium text-neutral-700 dark:text-neutral-300">
@@ -140,6 +154,11 @@ export function HomeBrokersSection({ metrics }: HomeBrokersSectionProps) {
           </View>
         )}
       </ScrollView>
+
+      <FloatingActionButton
+        accessibilityLabel="Add account"
+        onPress={() => router.push('/(app)/broker-connect')}
+      />
     </View>
   )
 }

@@ -253,10 +253,7 @@ export default function SignalsScreen() {
   )
 
   return (
-    <AppScreen
-      title="Manage Signals"
-      subtitle="Trade signals from your connected Telegram channels — entries, closes, and SL/TP updates only."
-    >
+    <AppScreen pageTitle="Manage Signals">
       <FlatList
         className="mt-2"
         data={rows}

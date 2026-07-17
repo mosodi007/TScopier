@@ -12,7 +12,7 @@ import {
 } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { router } from 'expo-router'
-import { Plus, Radio, RefreshCw, X } from 'lucide-react-native'
+import { Radio, RefreshCw, X } from 'lucide-react-native'
 import { callTelegramAuth, getSupabaseUrl, whenRealtimeReady } from '@tscopier/shared'
 import { maxTelegramChannels } from '@tscopier/web-lib/planLimits'
 import { prepareChannelSubscriptionUpsert } from '@tscopier/web-lib/signalChannelRegistry'
@@ -21,6 +21,7 @@ import { useAuth } from '@/context/AuthContext'
 import { useSubscription } from '@/context/SubscriptionContext'
 import { useTheme } from '@/context/ThemeContext'
 import { BrokerBadge } from '@/components/brokers/BrokerBadge'
+import { FloatingActionButton } from '@/components/layout/FloatingActionButton'
 import { Button, Card, MutedText } from '@/components/ui'
 import {
   getCachedTgChannels,
@@ -44,17 +45,11 @@ interface ChannelsPanelProps {
   /** When false, skip fetch + realtime. */
   enabled?: boolean
   contentContainerClassName?: string
-  /** Hide the inline Plus on the Active channels card (use section header instead). */
-  hideInlineAddButton?: boolean
-  /** Called when the add-channel action changes (for an external Plus button). */
-  onAddActionChange?: (action: { onPress: () => void; disabled: boolean } | null) => void
 }
 
 export function ChannelsPanel({
   enabled = true,
   contentContainerClassName = 'gap-4 pb-24',
-  hideInlineAddButton = false,
-  onAddActionChange,
 }: ChannelsPanelProps) {
   const { user, session } = useAuth()
   const { isDark } = useTheme()
@@ -211,12 +206,6 @@ export function ChannelsPanel({
     setPickerOpen(true)
   }, [hasTgSession])
 
-  useEffect(() => {
-    if (!onAddActionChange) return
-    onAddActionChange({ onPress: openPicker, disabled: loading })
-    return () => onAddActionChange(null)
-  }, [onAddActionChange, openPicker, loading])
-
   const closePicker = () => {
     setPickerOpen(false)
     setTgSearch('')
@@ -289,22 +278,8 @@ export function ChannelsPanel({
     }
   }
 
-  const addDisabled = loading
   const sheetBg = isDark ? tscTheme.surface.dark : '#ffffff'
   const mutedIcon = isDark ? tscTheme.textMuted.dark : tscTheme.textMuted.light
-
-  const plusButton = (
-    <Pressable
-      onPress={openPicker}
-      disabled={addDisabled}
-      accessibilityRole="button"
-      accessibilityLabel="Add channel from Telegram"
-      className="h-9 w-9 items-center justify-center rounded-full bg-teal-600 active:bg-teal-700"
-      style={{ opacity: addDisabled ? 0.5 : 1 }}
-    >
-      <Plus size={20} color="#ffffff" strokeWidth={2.5} />
-    </Pressable>
-  )
 
   return (
     <View className="flex-1">
@@ -356,7 +331,6 @@ export function ChannelsPanel({
                     {channels.length} configured
                   </MutedText>
                 </View>
-                {!hideInlineAddButton ? plusButton : null}
               </View>
 
               {channels.length === 0 ? (
@@ -551,6 +525,12 @@ export function ChannelsPanel({
           </View>
         </View>
       </Modal>
+
+      <FloatingActionButton
+        accessibilityLabel="Add channel from Telegram"
+        onPress={openPicker}
+        disabled={loading}
+      />
     </View>
   )
 }

@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
 import { Modal, Pressable, ScrollView, Text, TextInput, View } from 'react-native'
-import { Filter, Plus, Search } from 'lucide-react-native'
+import { Filter, Search } from 'lucide-react-native'
 import { useTheme } from '@/context/ThemeContext'
 import { cn } from '@/lib/cn'
 import { tscTheme } from '@/lib/tscTheme'
@@ -11,7 +11,6 @@ interface BrokerTabToolbarProps {
   brokerFilter: string
   onBrokerFilterChange: (value: string) => void
   brokerFilterOptions: string[]
-  onAddAccount: () => void
 }
 
 function RoundIconButton({
@@ -66,7 +65,6 @@ export function BrokerTabToolbar({
   brokerFilter,
   onBrokerFilterChange,
   brokerFilterOptions,
-  onAddAccount,
 }: BrokerTabToolbarProps) {
   const { isDark } = useTheme()
   const [searchOpen, setSearchOpen] = useState(false)
@@ -107,10 +105,6 @@ export function BrokerTabToolbar({
           active={filterActive}
         >
           <Filter size={18} color={filterActive ? activeIconColor : iconColor} strokeWidth={2} />
-        </RoundIconButton>
-
-        <RoundIconButton accessibilityLabel="Add account" onPress={onAddAccount}>
-          <Plus size={18} color={activeIconColor} strokeWidth={2.25} />
         </RoundIconButton>
       </View>
 

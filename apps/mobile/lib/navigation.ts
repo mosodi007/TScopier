@@ -8,6 +8,7 @@ import {
   CreditCard,
   FlaskConical,
   Home,
+  Landmark,
   LifeBuoy,
   Menu,
   Newspaper,
@@ -24,8 +25,9 @@ export type MobileNavTarget =
       href:
         | '/(app)/(tabs)/dashboard'
         | '/(app)/(tabs)/signals'
-        | '/(app)/(tabs)/trades'
+        | '/(app)/(tabs)/brokers'
         | '/(app)/(tabs)/channels'
+        | '/(app)/(tabs)/trades'
         | '/(app)/(tabs)/backtest'
         | '/(app)/(tabs)/more'
     }
@@ -47,8 +49,28 @@ export interface MobileNavSection {
   items: MobileNavItem[]
 }
 
-/** Mirrors web sidebar sections — primary tabs excluded from More. */
+/** Secondary destinations — primary tabs excluded. */
 export const MOBILE_MORE_SECTIONS: MobileNavSection[] = [
+  {
+    id: 'trading',
+    title: 'Trading',
+    items: [
+      {
+        id: 'trades',
+        label: 'Trades',
+        icon: ChartNoAxesCombined,
+        target: { kind: 'tab', href: '/(app)/(tabs)/trades' },
+        description: 'Open and closed positions from linked brokers',
+      },
+      {
+        id: 'backtest',
+        label: 'Backtest',
+        icon: FlaskConical,
+        target: { kind: 'tab', href: '/(app)/(tabs)/backtest' },
+        description: 'Replay channel signals against market data',
+      },
+    ],
+  },
   {
     id: 'signals',
     title: 'Signals',
@@ -153,18 +175,24 @@ export const MOBILE_MORE_SECTIONS: MobileNavSection[] = [
   },
 ]
 
+/** Bottom tab bar order (Home → Brokers → Channels → Signals → More). */
 export const TAB_SCREEN_ORDER = [
   'dashboard',
+  'brokers',
+  'channels',
   'signals',
-  'trades',
-  'backtest',
   'more',
 ] as const
+
+/** Hidden from the tab bar but still registered as tab routes (opened from More). */
+export const HIDDEN_TAB_SCREENS = ['trades', 'backtest'] as const
 
 export const TAB_NAV_META = {
   dashboard: { label: 'Home', icon: Home },
   signals: { label: 'Signals', icon: SlidersHorizontal },
+  brokers: { label: 'Brokers', icon: Landmark },
+  channels: { label: 'Channels', icon: Radio },
+  more: { label: 'More', icon: Menu },
   trades: { label: 'Trades', icon: ChartNoAxesCombined },
   backtest: { label: 'Backtest', icon: FlaskConical },
-  more: { label: 'More', icon: Menu },
 } as const
