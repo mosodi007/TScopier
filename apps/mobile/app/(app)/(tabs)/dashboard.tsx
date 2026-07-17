@@ -10,11 +10,13 @@ import {
 import PagerView from 'react-native-pager-view'
 import { TscopierLogo } from '@/components/branding/TscopierLogo'
 import { router } from 'expo-router'
+import type { BrokerAccount } from '@tscopier/shared'
 import { useAuth } from '@/context/AuthContext'
 import { useDashboardMetrics } from '@/hooks/useDashboardMetrics'
 import { useDashboardExtras } from '@/hooks/useDashboardExtras'
 import { useDashboardCharts } from '@/hooks/useDashboardCharts'
 import { LinkedAccountCard } from '@/components/dashboard/LinkedAccountCard'
+import { BrokerStatsModal } from '@/components/dashboard/BrokerStatsModal'
 import { OverviewStat, StatBlock } from '@/components/dashboard/StatBlock'
 import { DashboardPanel } from '@/components/dashboard/DashboardPanel'
 import { TradeVolumeChart } from '@/components/dashboard/TradeVolumeChart'
@@ -47,6 +49,7 @@ export default function DashboardScreen() {
   const { user } = useAuth()
   const pagerRef = useRef<PagerView>(null)
   const [homeTab, setHomeTab] = useState<HomeSectionTab>('dashboard')
+  const [statsBroker, setStatsBroker] = useState<BrokerAccount | null>(null)
   const metrics = useDashboardMetrics(user?.id)
   const {
     brokers,
@@ -249,7 +252,7 @@ export default function DashboardScreen() {
                       key={broker.id}
                       broker={broker}
                       live={liveByBroker[broker.id]}
-                      onPress={() => handleTabPress('brokers')}
+                      onPress={() => setStatsBroker(broker)}
                     />
                   ))}
                 </View>
@@ -266,6 +269,13 @@ export default function DashboardScreen() {
           <HomeChannelsSection />
         </View>
       </PagerView>
+
+      <BrokerStatsModal
+        broker={statsBroker}
+        live={statsBroker ? liveByBroker[statsBroker.id] : undefined}
+        visible={statsBroker != null}
+        onClose={() => setStatsBroker(null)}
+      />
     </AppScreen>
   )
 }

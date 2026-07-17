@@ -7,11 +7,33 @@ function readProcessEnv(key: string): string | undefined {
   return typeof value === 'string' && value.trim() ? value.trim() : undefined
 }
 
+function readExpoPublicFallback(viteKey: string): string {
+  // Expo inlines EXPO_PUBLIC_* only for static property access — do not use process.env[dynamicKey].
+  if (viteKey === 'VITE_SUPABASE_URL') {
+    return (process.env.EXPO_PUBLIC_SUPABASE_URL ?? '').trim()
+  }
+  if (viteKey === 'VITE_SUPABASE_ANON_KEY') {
+    return (process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY ?? '').trim()
+  }
+  if (viteKey === 'VITE_SUPABASE_REALTIME_URL') {
+    return (process.env.EXPO_PUBLIC_SUPABASE_REALTIME_URL ?? '').trim()
+  }
+  if (viteKey === 'VITE_WORKER_URL') {
+    return (process.env.EXPO_PUBLIC_WORKER_URL ?? '').trim()
+  }
+  return ''
+}
+
 function readViteEnv(key: string): string {
   const fromMeta = import.meta.env?.[key]
   if (typeof fromMeta === 'string' && fromMeta.trim()) return fromMeta.trim()
   const fromProcess = readProcessEnv(key)
   if (fromProcess) return fromProcess
+  // Expo / React Native: same values are published as EXPO_PUBLIC_*.
+  if (key.startsWith('VITE_')) {
+    const fromExpo = readExpoPublicFallback(key)
+    if (fromExpo) return fromExpo
+  }
   return ''
 }
 
