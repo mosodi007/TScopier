@@ -10,8 +10,7 @@ export default function TabLayout() {
         headerShown: false,
         tabBarShowLabel: false,
         lazy: true,
-        // Avoid freezeOnBlur — it was leaving the wrong screen visible after tab switches.
-        freezeOnBlur: false,
+        freezeOnBlur: true,
         // Let content scroll under the floating bar; the bar sizes itself.
         tabBarStyle: {
           position: 'absolute',

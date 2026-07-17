@@ -8,7 +8,7 @@ import { useSlidingTabHighlight } from '@/components/navigation/useSlidingTabHig
 import { TAB_NAV_META, TAB_SCREEN_ORDER } from '@/lib/navigation'
 import { tscTheme } from '@/lib/tscTheme'
 
-const BAR_PAD = 6
+const BAR_PAD = 12 
 
 export function FloatingTabBar({ state, navigation }: BottomTabBarProps) {
   const { isDark } = useTheme()
@@ -36,7 +36,7 @@ export function FloatingTabBar({ state, navigation }: BottomTabBarProps) {
   const { highlightStyle, onContainerLayout } = useSlidingTabHighlight(activeVisibleIndex, {
     tabCount: visibleRoutes.length,
     gap: 0,
-    inset: BAR_PAD,
+    inset: BAR_PAD - 5,
   })
 
   return (
@@ -93,8 +93,9 @@ export function FloatingTabBar({ state, navigation }: BottomTabBarProps) {
                     target: route.key,
                     canPreventDefault: true,
                   })
-                  if (event.defaultPrevented) return
-                  navigation.navigate(route.name, route.params)
+                  if (!focused && !event.defaultPrevented) {
+                    navigation.navigate(route.name, route.params)
+                  }
                 }}
                 onLongPress={() => {
                   navigation.emit({

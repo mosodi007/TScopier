@@ -22,6 +22,7 @@ import {
   type TradeVolumeDay,
 } from '@/lib/dashboardCharts'
 import { useScreenActive } from '@/hooks/useScreenActive'
+import { STALE_TTL, shouldLoadOnFocus } from '@/lib/staleCache'
 
 interface DbTradeRow {
   id: string
@@ -59,8 +60,11 @@ function dbRowToChartTrade(
 export function useDashboardCharts(
   userId: string | undefined,
   brokers: BrokerAccount[] = [],
+  opts?: { enabled?: boolean },
 ) {
-  const active = useScreenActive()
+  const screenActive = useScreenActive()
+  const enabled = opts?.enabled !== false
+  const active = screenActive && enabled
   const [tradeVolume7Day, setTradeVolume7Day] = useState<TradeVolumeDay[]>([])
   const [channelProfit7d, setChannelProfit7d] = useState<ChannelProfitRow[]>([])
   const [analytics, setAnalytics] = useState<DashboardAnalytics>(() =>
@@ -80,19 +84,32 @@ export function useDashboardCharts(
   const hasMtBroker = useMemo(() => brokers.some(isFxsocketLinkedBroker), [scopeKey])
 
   const hasLoadedOnceRef = useRef(false)
+  const lastFetchedAtRef = useRef<number | null>(null)
   const loadGenerationRef = useRef(0)
 
   const load = useCallback(
-    async (opts?: { silent?: boolean }) => {
+    async (loadOpts?: { silent?: boolean; force?: boolean }) => {
       if (!userId) {
         setTradeVolume7Day([])
         setChannelProfit7d([])
         setLoading(false)
         hasLoadedOnceRef.current = false
+        lastFetchedAtRef.current = null
         return
       }
 
-      const silent = opts?.silent ?? hasLoadedOnceRef.current
+      if (
+        !shouldLoadOnFocus({
+          force: loadOpts?.force,
+          lastFetchedAt: lastFetchedAtRef.current,
+          ttlMs: STALE_TTL.charts,
+          hasData: hasLoadedOnceRef.current,
+        })
+      ) {
+        return
+      }
+
+      const silent = loadOpts?.silent ?? hasLoadedOnceRef.current
       const generation = ++loadGenerationRef.current
       if (!silent) setLoading(true)
       setError(null)
@@ -200,6 +217,7 @@ export function useDashboardCharts(
         setChannelProfit7d(charts.channelProfit7d)
         setAnalytics(nextAnalytics)
         hasLoadedOnceRef.current = true
+        lastFetchedAtRef.current = Date.now()
       } finally {
         if (generation === loadGenerationRef.current) {
           setLoading(false)
@@ -223,7 +241,7 @@ export function useDashboardCharts(
   }, [userId, scopeKey, hasMtBroker, load, active])
 
   const refreshCharts = useCallback(
-    (opts?: { silent?: boolean }) => load(opts),
+    (refreshOpts?: { silent?: boolean }) => load({ ...refreshOpts, force: true }),
     [load],
   )
 

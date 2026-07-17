@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { InteractionManager } from 'react-native'
 import type { Signal } from '@tscopier/shared'
 import {
@@ -10,6 +10,7 @@ import {
 } from '@tscopier/web-lib/copierLogDisplay'
 import { supabase } from '@/lib/supabase'
 import { useScreenActive } from '@/hooks/useScreenActive'
+import { STALE_TTL, shouldLoadOnFocus } from '@/lib/staleCache'
 
 export type SignalDatePreset = 'all' | 'today' | '7d' | '30d' | 'custom'
 
@@ -153,18 +154,36 @@ export function useManageSignals(
     total: 0,
   })
   const [loading, setLoading] = useState(true)
+  const [refreshing, setRefreshing] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const hasLoadedRef = useRef(false)
+  const lastFetchedAtRef = useRef<number | null>(null)
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (opts?: { force?: boolean }) => {
     if (!userId) {
       setRows([])
       setChannels([])
       setStats({ today: 0, last7d: 0, last30d: 0, total: 0 })
       setLoading(false)
+      hasLoadedRef.current = false
+      lastFetchedAtRef.current = null
       return
     }
 
-    setLoading(true)
+    if (
+      !shouldLoadOnFocus({
+        force: opts?.force,
+        lastFetchedAt: lastFetchedAtRef.current,
+        ttlMs: STALE_TTL.signals,
+        hasData: hasLoadedRef.current,
+      })
+    ) {
+      return
+    }
+
+    const background = hasLoadedRef.current
+    if (background) setRefreshing(true)
+    else setLoading(true)
     setError(null)
 
     const [channelsRes, signalsRes, openTradesRes] = await Promise.all([
@@ -193,6 +212,7 @@ export function useManageSignals(
           'Failed to load signals',
       )
       setLoading(false)
+      setRefreshing(false)
       return
     }
 
@@ -261,7 +281,10 @@ export function useManageSignals(
       last30d: entrySignals.filter(s => new Date(s.created_at) >= start30d).length,
       total: entrySignals.length,
     })
+    hasLoadedRef.current = true
+    lastFetchedAtRef.current = Date.now()
     setLoading(false)
+    setRefreshing(false)
   }, [userId])
 
   useEffect(() => {
@@ -290,7 +313,8 @@ export function useManageSignals(
     channels,
     stats,
     loading,
+    refreshing,
     error,
-    refresh: load,
+    refresh: () => void load({ force: true }),
   }
 }

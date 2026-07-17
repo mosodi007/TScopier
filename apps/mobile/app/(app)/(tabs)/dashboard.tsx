@@ -49,7 +49,14 @@ export default function DashboardScreen() {
   const { user } = useAuth()
   const pagerRef = useRef<PagerView>(null)
   const [homeTab, setHomeTab] = useState<HomeSectionTab>('dashboard')
+  const [visitedSections, setVisitedSections] = useState<Record<HomeSectionTab, boolean>>({
+    dashboard: true,
+    brokers: false,
+    channels: false,
+  })
   const [statsBroker, setStatsBroker] = useState<BrokerAccount | null>(null)
+
+  const onDashboardSection = homeTab === 'dashboard'
   const metrics = useDashboardMetrics(user?.id)
   const {
     brokers,
@@ -61,28 +68,43 @@ export default function DashboardScreen() {
     refreshing,
     refresh,
   } = metrics
-  const { copierLogs, copierEngineActivities, refreshExtras } = useDashboardExtras(user?.id)
+  const { copierLogs, copierEngineActivities, refreshExtras } = useDashboardExtras(user?.id, {
+    enabled: onDashboardSection,
+  })
   const {
     tradeVolume7Day,
     channelProfit7d,
     analytics,
     loading: chartsLoading,
     refreshCharts,
-  } = useDashboardCharts(user?.id, brokers)
+  } = useDashboardCharts(user?.id, brokers, { enabled: onDashboardSection })
 
   const onRefresh = async () => {
     await Promise.all([refresh(), refreshExtras(), refreshCharts({ silent: true })])
   }
 
-  const handleTabPress = useCallback((tab: HomeSectionTab) => {
-    setHomeTab(tab)
-    pagerRef.current?.setPage(homeTabIndex(tab))
+  const markVisited = useCallback((tab: HomeSectionTab) => {
+    setVisitedSections(prev => (prev[tab] ? prev : { ...prev, [tab]: true }))
   }, [])
 
-  const handlePageSelected = useCallback((event: NativeSyntheticEvent<{ position: number }>) => {
-    const nextTab = HOME_SECTION_TAB_ORDER[event.nativeEvent.position]
-    if (nextTab) setHomeTab(nextTab)
-  }, [])
+  const handleTabPress = useCallback(
+    (tab: HomeSectionTab) => {
+      markVisited(tab)
+      setHomeTab(tab)
+      pagerRef.current?.setPage(homeTabIndex(tab))
+    },
+    [markVisited],
+  )
+
+  const handlePageSelected = useCallback(
+    (event: NativeSyntheticEvent<{ position: number }>) => {
+      const nextTab = HOME_SECTION_TAB_ORDER[event.nativeEvent.position]
+      if (!nextTab) return
+      markVisited(nextTab)
+      setHomeTab(nextTab)
+    },
+    [markVisited],
+  )
 
   const tradesSub =
     analytics.tradesTaken === 0
@@ -95,6 +117,9 @@ export default function DashboardScreen() {
     aggregate.openTrades > 0
       ? `Across ${brokers.filter(b => (liveByBroker[b.id]?.openTrades ?? 0) > 0).length || brokers.length} account(s)`
       : 'No open positions'
+
+  const showBrokers = visitedSections.brokers
+  const showChannels = visitedSections.channels
 
   return (
     <AppScreen title={<TscopierLogo />}>
@@ -262,11 +287,13 @@ export default function DashboardScreen() {
         </View>
 
         <View key="brokers" style={{ flex: 1 }}>
-          <HomeBrokersSection metrics={metrics} />
+          {showBrokers ? <HomeBrokersSection metrics={metrics} /> : null}
         </View>
 
         <View key="channels" style={{ flex: 1 }}>
-          <HomeChannelsSection />
+          {showChannels ? (
+            <HomeChannelsSection enabled={homeTab === 'channels'} />
+          ) : null}
         </View>
       </PagerView>
 

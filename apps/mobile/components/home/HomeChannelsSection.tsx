@@ -24,7 +24,12 @@ interface TelegramChannelRow {
   last_live_at: string | null
 }
 
-export function HomeChannelsSection() {
+interface HomeChannelsSectionProps {
+  /** When false, skip fetch + realtime (section not visited / screen inactive). */
+  enabled?: boolean
+}
+
+export function HomeChannelsSection({ enabled = true }: HomeChannelsSectionProps) {
   const { user } = useAuth()
   const [channels, setChannels] = useState<TelegramChannelRow[]>([])
   const [brokers, setBrokers] = useState<BrokerAccount[]>([])
@@ -48,10 +53,12 @@ export function HomeChannelsSection() {
   }, [user?.id])
 
   useEffect(() => {
+    if (!enabled) return
     void load()
     if (!user?.id) return
     let channel: ReturnType<typeof supabase.channel> | null = null
     void whenRealtimeReady(supabase, user.id).then(() => {
+      if (!enabled) return
       channel = supabase
         .channel(`home_channels:${user.id}`)
         .on('postgres_changes', { event: '*', schema: 'public', table: 'telegram_channels', filter: `user_id=eq.${user.id}` }, () => void load())
@@ -61,7 +68,7 @@ export function HomeChannelsSection() {
     return () => {
       if (channel) void supabase.removeChannel(channel)
     }
-  }, [user?.id, load])
+  }, [user?.id, load, enabled])
 
   const onRefresh = async () => {
     setRefreshing(true)

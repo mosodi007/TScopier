@@ -1,10 +1,9 @@
-import { useMemo, useState } from 'react'
+import { useCallback, useMemo, useState } from 'react'
 import {
   FlatList,
   Modal,
   Pressable,
   RefreshControl,
-  ScrollView,
   Text,
   TextInput,
   View,
@@ -19,6 +18,7 @@ import {
   applySignalDatePreset,
   detectSignalDatePreset,
   useManageSignals,
+  type ManageSignalRow,
   type SignalDatePreset,
 } from '@/hooks/useManageSignals'
 import { cn } from '@/lib/cn'
@@ -146,7 +146,7 @@ export default function SignalsScreen() {
   const [channelPickerOpen, setChannelPickerOpen] = useState(false)
   const [presetPickerOpen, setPresetPickerOpen] = useState(false)
 
-  const { rows, channels, stats, loading, error, refresh } = useManageSignals(user?.id, {
+  const { rows, channels, stats, loading, refreshing, error, refresh } = useManageSignals(user?.id, {
     channelFilter,
     dateFrom,
     dateTo,
@@ -184,84 +184,100 @@ export default function SignalsScreen() {
     setDateTo(next.dateTo)
   }
 
+  const renderItem = useCallback(
+    ({ item }: { item: ManageSignalRow }) => <ManageSignalRowCard item={item} />,
+    [],
+  )
+
+  const listHeader = (
+    <View className="gap-4 pb-2">
+      {error ? <Text className="text-sm text-error-600">{error}</Text> : null}
+
+      <Card className="overflow-hidden p-0">
+        <View className="flex-row flex-wrap">
+          <StatCell label="Signals today" value={stats.today} borderRight borderBottom />
+          <StatCell label="Last 7 days" value={stats.last7d} borderBottom />
+          <StatCell label="Last 30 days" value={stats.last30d} borderRight />
+          <StatCell label="All time" value={stats.total} />
+        </View>
+      </Card>
+
+      <Card className="gap-3">
+        <FilterSelect value={channelLabel} onPress={() => setChannelPickerOpen(true)} />
+
+        <View>
+          <Text className="mb-1 text-xs font-medium text-neutral-500 dark:text-neutral-400">From</Text>
+          <TextInput
+            value={dateFrom}
+            onChangeText={setDateFrom}
+            placeholder="YYYY-MM-DD"
+            placeholderTextColor="#94a3b8"
+            autoCapitalize="none"
+            autoCorrect={false}
+            className="rounded-xl border border-neutral-200 bg-white px-3 py-3 text-sm text-neutral-700 dark:border-neutral-800 dark:bg-neutral-900 dark:text-neutral-300"
+          />
+        </View>
+
+        <View>
+          <Text className="mb-1 text-xs font-medium text-neutral-500 dark:text-neutral-400">To</Text>
+          <TextInput
+            value={dateTo}
+            onChangeText={setDateTo}
+            placeholder="YYYY-MM-DD"
+            placeholderTextColor="#94a3b8"
+            autoCapitalize="none"
+            autoCorrect={false}
+            className="rounded-xl border border-neutral-200 bg-white px-3 py-3 text-sm text-neutral-700 dark:border-neutral-800 dark:bg-neutral-900 dark:text-neutral-300"
+          />
+        </View>
+
+        <FilterSelect value={presetLabel} onPress={() => setPresetPickerOpen(true)} />
+
+        <Pressable
+          onPress={resetFilters}
+          className="items-center rounded-xl bg-teal-600 py-3 active:bg-teal-700"
+        >
+          <Text className="text-sm font-semibold text-white">Reset filters</Text>
+        </Pressable>
+      </Card>
+
+      {rows.length === 0 && !loading ? (
+        <Card>
+          <BodyText>No trade signals for the selected filters.</BodyText>
+          <MutedText className="mt-1 text-xs">
+            Entries, closes, and SL/TP updates from your Telegram channels appear here.
+          </MutedText>
+        </Card>
+      ) : null}
+    </View>
+  )
+
   return (
     <AppScreen
       title="Manage Signals"
       subtitle="Trade signals from your connected Telegram channels — entries, closes, and SL/TP updates only."
     >
-      {error ? <Text className="mt-1 text-sm text-error-600">{error}</Text> : null}
-
-      <ScrollView
+      <FlatList
         className="mt-2"
+        data={rows}
+        keyExtractor={item => item.id}
+        renderItem={renderItem}
+        ListHeaderComponent={listHeader}
         refreshControl={
-          <RefreshControl refreshing={loading} onRefresh={() => void refresh()} tintColor={tscTheme.primary} />
+          <RefreshControl
+            refreshing={refreshing || (loading && rows.length === 0)}
+            onRefresh={() => void refresh()}
+            tintColor={tscTheme.primary}
+          />
         }
-        contentContainerClassName="gap-4 pb-24"
+        contentContainerClassName="pb-24"
         showsVerticalScrollIndicator={false}
-      >
-        <Card className="overflow-hidden p-0">
-          <View className="flex-row flex-wrap">
-            <StatCell label="Signals today" value={stats.today} borderRight borderBottom />
-            <StatCell label="Last 7 days" value={stats.last7d} borderBottom />
-            <StatCell label="Last 30 days" value={stats.last30d} borderRight />
-            <StatCell label="All time" value={stats.total} />
-          </View>
-        </Card>
-
-        <Card className="gap-3">
-          <FilterSelect value={channelLabel} onPress={() => setChannelPickerOpen(true)} />
-
-          <View>
-            <Text className="mb-1 text-xs font-medium text-neutral-500 dark:text-neutral-400">From</Text>
-            <TextInput
-              value={dateFrom}
-              onChangeText={setDateFrom}
-              placeholder="YYYY-MM-DD"
-              placeholderTextColor="#94a3b8"
-              autoCapitalize="none"
-              autoCorrect={false}
-              className="rounded-xl border border-neutral-200 bg-white px-3 py-3 text-sm text-neutral-700 dark:border-neutral-800 dark:bg-neutral-900 dark:text-neutral-300"
-            />
-          </View>
-
-          <View>
-            <Text className="mb-1 text-xs font-medium text-neutral-500 dark:text-neutral-400">To</Text>
-            <TextInput
-              value={dateTo}
-              onChangeText={setDateTo}
-              placeholder="YYYY-MM-DD"
-              placeholderTextColor="#94a3b8"
-              autoCapitalize="none"
-              autoCorrect={false}
-              className="rounded-xl border border-neutral-200 bg-white px-3 py-3 text-sm text-neutral-700 dark:border-neutral-800 dark:bg-neutral-900 dark:text-neutral-300"
-            />
-          </View>
-
-          <FilterSelect value={presetLabel} onPress={() => setPresetPickerOpen(true)} />
-
-          <Pressable
-            onPress={resetFilters}
-            className="items-center rounded-xl bg-teal-600 py-3 active:bg-teal-700"
-          >
-            <Text className="text-sm font-semibold text-white">Reset filters</Text>
-          </Pressable>
-        </Card>
-
-        {rows.length === 0 && !loading ? (
-          <Card>
-            <BodyText>No trade signals for the selected filters.</BodyText>
-            <MutedText className="mt-1 text-xs">
-              Entries, closes, and SL/TP updates from your Telegram channels appear here.
-            </MutedText>
-          </Card>
-        ) : rows.length > 0 ? (
-          <Card className="overflow-hidden p-0">
-            {rows.map(item => (
-              <ManageSignalRowCard key={item.id} item={item} />
-            ))}
-          </Card>
-        ) : null}
-      </ScrollView>
+        initialNumToRender={12}
+        maxToRenderPerBatch={16}
+        windowSize={7}
+        removeClippedSubviews
+        keyboardShouldPersistTaps="handled"
+      />
 
       <PickerModal
         visible={channelPickerOpen}

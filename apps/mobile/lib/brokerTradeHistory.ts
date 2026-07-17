@@ -7,6 +7,9 @@ import { resolveBrokerConnectMs, type BrokerConnectAnchor } from '@/lib/tradesSi
 
 export const DASHBOARD_CHART_MT_HISTORY_DAYS = 10
 export const DASHBOARD_MT_HISTORY_LIMIT = 5000
+/** Initial Trades tab load — open + recent closes only; full history on pull-to-refresh. */
+export const TRADES_INITIAL_HISTORY_DAYS = 14
+export const TRADES_INITIAL_LIMIT = 400
 const FXSOCKET_TRADES_TIMEOUT_MS = 180_000
 
 export function resolveDashboardMtHistoryFrom(

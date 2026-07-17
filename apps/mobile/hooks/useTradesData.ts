@@ -5,6 +5,8 @@ import { supabase } from '@/lib/supabase'
 import { isFxsocketLinkedBroker } from '@/lib/brokerLink'
 import {
   DASHBOARD_MT_HISTORY_LIMIT,
+  TRADES_INITIAL_HISTORY_DAYS,
+  TRADES_INITIAL_LIMIT,
   fetchBrokerMtTrades,
 } from '@/lib/brokerTradeHistory'
 import { filterMtTradesSinceConnect } from '@/lib/tradesSinceConnect'
@@ -12,6 +14,7 @@ import type { MtTrade } from '@/lib/mtTrade'
 import { parseMtHistoryTimestamp } from '@/lib/mtApiDateTime'
 import { useDashboardRealtime } from '@/hooks/useDashboardRealtime'
 import { useScreenActive } from '@/hooks/useScreenActive'
+import { STALE_TTL, shouldLoadOnFocus } from '@/lib/staleCache'
 
 function tradeActivityMs(trade: MtTrade): number {
   if (trade.status === 'closed') {
@@ -37,12 +40,26 @@ export function useTradesData(userId: string | undefined) {
   const [lastSyncedAt, setLastSyncedAt] = useState<number | null>(null)
   const inflightRef = useRef(false)
   const hasLoadedRef = useRef(false)
+  const lastFetchedAtRef = useRef<number | null>(null)
   const activeRef = useRef(active)
   activeRef.current = active
 
   const load = useCallback(
-    async (opts?: { force?: boolean; background?: boolean }) => {
+    async (opts?: { force?: boolean; background?: boolean; fullHistory?: boolean }) => {
       if (!userId || inflightRef.current) return
+
+      const fullHistory = opts?.fullHistory === true
+      if (
+        !shouldLoadOnFocus({
+          force: opts?.force || fullHistory,
+          lastFetchedAt: lastFetchedAtRef.current,
+          ttlMs: STALE_TTL.trades,
+          hasData: hasLoadedRef.current,
+        })
+      ) {
+        return
+      }
+
       inflightRef.current = true
 
       const background = opts?.background ?? hasLoadedRef.current
@@ -64,15 +81,18 @@ export function useTradesData(userId: string | undefined) {
         if (linked.length === 0) {
           setTrades([])
           setError(null)
-          setLastSyncedAt(Date.now())
+          const now = Date.now()
+          setLastSyncedAt(now)
+          lastFetchedAtRef.current = now
           hasLoadedRef.current = true
           return
         }
 
         const raw = await fetchBrokerMtTrades({
           accounts: linked,
-          fullHistory: true,
-          limit: DASHBOARD_MT_HISTORY_LIMIT,
+          fullHistory,
+          historyDays: fullHistory ? undefined : TRADES_INITIAL_HISTORY_DAYS,
+          limit: fullHistory ? DASHBOARD_MT_HISTORY_LIMIT : TRADES_INITIAL_LIMIT,
           includeBalanceCashflow: false,
         })
         if (!activeRef.current && hasLoadedRef.current) {
@@ -82,7 +102,9 @@ export function useTradesData(userId: string | undefined) {
         const filtered = filterMtTradesSinceConnect(raw, linked)
         setTrades(sortTradesNewestFirst(filtered))
         setError(null)
-        setLastSyncedAt(Date.now())
+        const now = Date.now()
+        setLastSyncedAt(now)
+        lastFetchedAtRef.current = now
         hasLoadedRef.current = true
       } catch (e) {
         if (!hasLoadedRef.current) {
@@ -103,6 +125,7 @@ export function useTradesData(userId: string | undefined) {
       setTrades([])
       setLoading(false)
       hasLoadedRef.current = false
+      lastFetchedAtRef.current = null
       return
     }
     if (!active) return
@@ -136,6 +159,7 @@ export function useTradesData(userId: string | undefined) {
     refreshing,
     error,
     lastSyncedAt,
-    refresh: () => void load({ force: true }),
+    /** Pull-to-refresh loads full history. */
+    refresh: () => void load({ force: true, fullHistory: true }),
   }
 }
