@@ -36,7 +36,9 @@ export function FloatingTabBar({ state, navigation }: BottomTabBarProps) {
   const { highlightStyle, onContainerLayout } = useSlidingTabHighlight(activeVisibleIndex, {
     tabCount: visibleRoutes.length,
     gap: 0,
+    // Keep pill height (taller than content pad); align x/width to tab columns.
     inset: BAR_PAD - 5,
+    horizontalInset: BAR_PAD,
   })
 
   return (
@@ -110,20 +112,21 @@ export function FloatingTabBar({ state, navigation }: BottomTabBarProps) {
                   opacity: pressed ? 0.88 : 1,
                 })}
               >
-                <TabBarNavIcon icon={meta.icon} color={color} size={22} />
-                <Text
-                  numberOfLines={1}
-                  style={{
-                    marginTop: 2,
-                    width: '100%',
-                    fontSize: 9,
-                    fontWeight: '600',
-                    color,
-                    textAlign: 'center',
-                  }}
-                >
-                  {meta.label}
-                </Text>
+                <View style={{ alignItems: 'center', justifyContent: 'center' }}>
+                  <TabBarNavIcon icon={meta.icon} color={color} size={22} />
+                  <Text
+                    numberOfLines={1}
+                    style={{
+                      marginTop: 2,
+                      fontSize: 9,
+                      fontWeight: '600',
+                      color,
+                      textAlign: 'center',
+                    }}
+                  >
+                    {meta.label}
+                  </Text>
+                </View>
               </Pressable>
             </View>
           )

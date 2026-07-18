@@ -15,14 +15,21 @@ const TIMING = {
 interface SlidingTabHighlightOptions {
   tabCount: number
   gap?: number
-  /** Match container padding so the pill sits inside the border. */
+  /** Vertical inset — controls pill height inside the bar. */
   inset?: number
+  /**
+   * Horizontal inset for pill x/width. Defaults to `inset`.
+   * Pass the container’s content padding so the pill lines up under each tab
+   * (icons/labels stay centered) while `inset` can stay smaller for a taller pill.
+   */
+  horizontalInset?: number
 }
 
 export function useSlidingTabHighlight(
   activeIndex: number,
-  { tabCount, gap = 0, inset = 0 }: SlidingTabHighlightOptions,
+  { tabCount, gap = 0, inset = 0, horizontalInset }: SlidingTabHighlightOptions,
 ) {
+  const hInset = horizontalInset ?? inset
   const translateX = useSharedValue(0)
   const translateY = useSharedValue(inset)
   const highlightWidth = useSharedValue(0)
@@ -35,10 +42,10 @@ export function useSlidingTabHighlight(
     (index: number, width: number, height: number) => {
       if (tabCount <= 0 || width <= 0 || height <= 0) return
 
-      const innerWidth = Math.max(0, width - inset * 2)
+      const innerWidth = Math.max(0, width - hInset * 2)
       const innerHeight = Math.max(0, height - inset * 2)
       const segmentWidth = (innerWidth - gap * (tabCount - 1)) / tabCount
-      const x = inset + index * (segmentWidth + gap)
+      const x = hInset + index * (segmentWidth + gap)
 
       translateX.value = withTiming(x, TIMING)
       translateY.value = withTiming(inset, TIMING)
@@ -46,7 +53,7 @@ export function useSlidingTabHighlight(
       highlightHeight.value = withTiming(innerHeight, TIMING)
       opacity.value = withTiming(1, { duration: 120 })
     },
-    [gap, highlightHeight, highlightWidth, inset, opacity, tabCount, translateX, translateY],
+    [gap, hInset, highlightHeight, highlightWidth, inset, opacity, tabCount, translateX, translateY],
   )
 
   useEffect(() => {
