@@ -1,76 +1,179 @@
-import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react'
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react'
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import { whenRealtimeReady } from '@tscopier/shared'
-import { supabase } from '@/lib/supabase'
+import { tradeNotificationsEn } from '@tscopier/web-i18n/tradeNotifications/en'
+import {
+  countUnreadNotifications,
+  TRADE_EXECUTION_LOG_NOTIFICATION_SELECT,
+  TRADE_NOTIFICATION_LOG_ACTIONS,
+  tradeNotificationsFromLogs,
+  type TradeExecutionLogRow,
+  type TradeNotification,
+} from '@tscopier/web-lib/tradeNotifications'
 import { useAuth } from '@/context/AuthContext'
+import { supabase } from '@/lib/supabase'
 
-export interface AppNotification {
-  id: string
-  title: string
-  body: string
-  createdAt: string
-  read: boolean
+const MAX_NOTIFICATIONS = 30
+const FETCH_LIMIT = 120
+const REALTIME_DEBOUNCE_MS = 300
+const LAST_READ_KEY_PREFIX = 'tsc_notifications_last_read_at:'
+
+function buildChannelDisplayNames(
+  channels: Array<{ id: string; display_name: string; channel_username?: string | null }>,
+): Record<string, string> {
+  const out: Record<string, string> = {}
+  for (const c of channels) {
+    const name = c.display_name?.trim()
+    const username = c.channel_username?.trim().replace(/^@/, '')
+    out[c.id] = name || (username ? `@${username}` : 'Unnamed channel')
+  }
+  return out
+}
+
+function buildBrokerLabels(
+  brokers: Array<{ id: string; label?: string | null; broker_name?: string | null }>,
+): Record<string, string> {
+  const out: Record<string, string> = {}
+  for (const b of brokers) {
+    const label = b.label?.trim()
+    const brokerName = b.broker_name?.trim()
+    out[b.id] = label || brokerName || ''
+  }
+  return out
+}
+
+async function readLastReadAt(userId: string): Promise<string | null> {
+  try {
+    return await AsyncStorage.getItem(`${LAST_READ_KEY_PREFIX}${userId}`)
+  } catch {
+    return null
+  }
+}
+
+async function writeLastReadAt(userId: string, iso: string): Promise<void> {
+  try {
+    await AsyncStorage.setItem(`${LAST_READ_KEY_PREFIX}${userId}`, iso)
+  } catch {
+    // ignore storage failures
+  }
 }
 
 interface NotificationsContextValue {
-  notifications: AppNotification[]
+  items: TradeNotification[]
   unreadCount: number
-  markRead: (id: string) => Promise<void>
-  markAllRead: () => Promise<void>
+  loading: boolean
+  markAllRead: () => void
+  refresh: () => Promise<void>
 }
-
-const READ_KEY_PREFIX = 'tscopier.notifications.read.'
 
 const NotificationsContext = createContext<NotificationsContextValue>({
-  notifications: [],
+  items: [],
   unreadCount: 0,
-  markRead: async () => {},
-  markAllRead: async () => {},
+  loading: false,
+  markAllRead: () => {},
+  refresh: async () => {},
 })
-
-function formatLogTitle(action: string, status: string): { title: string; body: string } {
-  const act = action.toLowerCase()
-  const ok = status.toLowerCase() === 'success'
-  if (act.includes('order_send') || act.includes('signal_entry')) {
-    return {
-      title: ok ? 'Trade opened' : 'Trade skipped',
-      body: ok ? 'A new position was opened on your broker.' : 'Signal was not copied to broker.',
-    }
-  }
-  if (act.includes('mgmt_close') || act.includes('close')) {
-    return { title: 'Trade closed', body: 'A position was closed on your broker.' }
-  }
-  if (act.includes('modify') || act.includes('breakeven')) {
-    return { title: 'Trade updated', body: 'SL/TP was modified on an open position.' }
-  }
-  return { title: 'Copier activity', body: `${action} — ${status}` }
-}
 
 export function NotificationsProvider({ children }: { children: React.ReactNode }) {
   const { user } = useAuth()
-  const [notifications, setNotifications] = useState<AppNotification[]>([])
-  const [readIds, setReadIds] = useState<Set<string>>(new Set())
-
-  const storageKey = user?.id ? `${READ_KEY_PREFIX}${user.id}` : null
+  const [items, setItems] = useState<TradeNotification[]>([])
+  const [loading, setLoading] = useState(true)
+  const [lastReadAt, setLastReadAt] = useState<string | null>(null)
+  const channelNamesRef = useRef<Record<string, string>>({})
+  const brokerLabelsRef = useRef<Record<string, string>>({})
+  const rawRowsRef = useRef<TradeExecutionLogRow[]>([])
+  const knownLogIdsRef = useRef(new Set<string>())
+  const notificationIdsRef = useRef(new Set<string>())
 
   useEffect(() => {
-    if (!storageKey) return
-    AsyncStorage.getItem(storageKey).then(raw => {
-      if (!raw) return
-      try {
-        const ids = JSON.parse(raw) as string[]
-        setReadIds(new Set(ids))
-      } catch { /* ignore */ }
-    })
-  }, [storageKey])
+    if (!user?.id) {
+      setLastReadAt(null)
+      return
+    }
+    void readLastReadAt(user.id).then(setLastReadAt)
+  }, [user?.id])
 
-  const persistRead = useCallback(async (ids: Set<string>) => {
-    if (!storageKey) return
-    await AsyncStorage.setItem(storageKey, JSON.stringify([...ids]))
-  }, [storageKey])
+  const applyRows = useCallback((rows: TradeExecutionLogRow[]): TradeNotification[] => {
+    rawRowsRef.current = rows
+    return tradeNotificationsFromLogs(rows, tradeNotificationsEn, {
+      channelDisplayNames: channelNamesRef.current,
+      brokerLabels: brokerLabelsRef.current,
+    }).slice(0, MAX_NOTIFICATIONS)
+  }, [])
+
+  const refresh = useCallback(async () => {
+    if (!user?.id) {
+      setItems([])
+      setLoading(false)
+      knownLogIdsRef.current.clear()
+      notificationIdsRef.current.clear()
+      rawRowsRef.current = []
+      return
+    }
+    setLoading(true)
+    try {
+      const [channelsRes, brokersRes, logsRes] = await Promise.all([
+        supabase
+          .from('telegram_channels')
+          .select('id, display_name, channel_username')
+          .eq('user_id', user.id),
+        supabase
+          .from('broker_accounts')
+          .select('id, label, broker_name')
+          .eq('user_id', user.id),
+        supabase
+          .from('trade_execution_logs')
+          .select(TRADE_EXECUTION_LOG_NOTIFICATION_SELECT)
+          .eq('user_id', user.id)
+          .eq('status', 'success')
+          .in('action', [...TRADE_NOTIFICATION_LOG_ACTIONS])
+          .order('created_at', { ascending: false })
+          .limit(FETCH_LIMIT),
+      ])
+      if (channelsRes.error) throw new Error(channelsRes.error.message)
+      if (brokersRes.error) throw new Error(brokersRes.error.message)
+      if (logsRes.error) throw new Error(logsRes.error.message)
+
+      channelNamesRef.current = buildChannelDisplayNames(channelsRes.data ?? [])
+      brokerLabelsRef.current = buildBrokerLabels(brokersRes.data ?? [])
+      const rows = (logsRes.data ?? []) as TradeExecutionLogRow[]
+      knownLogIdsRef.current = new Set(rows.map(r => r.id))
+      const next = applyRows(rows)
+      notificationIdsRef.current = new Set(next.map(n => n.id))
+      setItems(next)
+    } catch (e) {
+      console.warn('[notifications] load failed', e)
+    } finally {
+      setLoading(false)
+    }
+  }, [user?.id, applyRows])
+
+  useEffect(() => {
+    void refresh()
+  }, [refresh])
 
   useEffect(() => {
     if (!user?.id) return
+
+    let debounceTimer: ReturnType<typeof setTimeout> | null = null
+
+    const flush = () => {
+      debounceTimer = null
+      void refresh()
+    }
+
+    const schedule = () => {
+      if (debounceTimer) clearTimeout(debounceTimer)
+      debounceTimer = setTimeout(flush, REALTIME_DEBOUNCE_MS)
+    }
 
     let cancelled = false
     let channel: ReturnType<typeof supabase.channel> | null = null
@@ -88,91 +191,51 @@ export function NotificationsProvider({ children }: { children: React.ReactNode 
             filter: `user_id=eq.${user.id}`,
           },
           payload => {
-            const row = payload.new as Record<string, unknown>
-            const action = String(row.action ?? '')
-            const status = String(row.status ?? '')
-            if (!action || action.startsWith('pipeline_')) return
-            const { title, body } = formatLogTitle(action, status)
-            const item: AppNotification = {
-              id: String(row.id),
-              title,
-              body,
-              createdAt: String(row.created_at ?? new Date().toISOString()),
-              read: false,
-            }
-            setNotifications(prev => [item, ...prev].slice(0, 100))
+            const row = payload.new as TradeExecutionLogRow
+            if (!row?.id || knownLogIdsRef.current.has(row.id)) return
+            knownLogIdsRef.current.add(row.id)
+            rawRowsRef.current = [row, ...rawRowsRef.current]
+              .sort((a, b) => Date.parse(b.created_at) - Date.parse(a.created_at))
+              .slice(0, FETCH_LIMIT)
+            setItems(applyRows(rawRowsRef.current))
+            schedule()
           },
         )
         .subscribe()
     })
 
-    void supabase
-      .from('trade_execution_logs')
-      .select('id, action, status, created_at')
-      .eq('user_id', user.id)
-      .order('created_at', { ascending: false })
-      .limit(30)
-      .then(({ data }) => {
-        if (!data) return
-        setNotifications(
-          data.map(row => {
-            const { title, body } = formatLogTitle(String(row.action), String(row.status))
-            return {
-              id: String(row.id),
-              title,
-              body,
-              createdAt: String(row.created_at),
-              read: false,
-            }
-          }),
-        )
-      })
-
     return () => {
       cancelled = true
+      if (debounceTimer) clearTimeout(debounceTimer)
       if (channel) void supabase.removeChannel(channel)
     }
+  }, [user?.id, refresh, applyRows])
+
+  const markAllRead = useCallback(() => {
+    if (!user?.id) return
+    const now = new Date().toISOString()
+    setLastReadAt(now)
+    void writeLastReadAt(user.id, now)
   }, [user?.id])
 
-  const notificationsWithRead = useMemo(
-    () => notifications.map(n => ({ ...n, read: readIds.has(n.id) || n.read })),
-    [notifications, readIds],
-  )
-
   const unreadCount = useMemo(
-    () => notificationsWithRead.filter(n => !n.read).length,
-    [notificationsWithRead],
+    () => countUnreadNotifications(items, lastReadAt),
+    [items, lastReadAt],
   )
 
-  const markRead = useCallback(async (id: string) => {
-    setReadIds(prev => {
-      const next = new Set(prev)
-      next.add(id)
-      void persistRead(next)
-      return next
-    })
-  }, [persistRead])
-
-  const markAllRead = useCallback(async () => {
-    setReadIds(prev => {
-      const next = new Set(prev)
-      for (const n of notifications) next.add(n.id)
-      void persistRead(next)
-      return next
-    })
-  }, [notifications, persistRead])
+  const value = useMemo(
+    (): NotificationsContextValue => ({
+      items,
+      unreadCount,
+      loading,
+      markAllRead,
+      refresh,
+    }),
+    [items, unreadCount, loading, markAllRead, refresh],
+  )
 
   return (
-    <NotificationsContext.Provider
-      value={{
-        notifications: notificationsWithRead,
-        unreadCount,
-        markRead,
-        markAllRead,
-      }}
-    >
-      {children}
-    </NotificationsContext.Provider>
+    <NotificationsContext.Provider value={value}>{children}</NotificationsContext.Provider>
   )
 }
 

@@ -1,8 +1,7 @@
-import { ScrollView, Text, View } from 'react-native'
+import { ScrollView, View } from 'react-native'
 import { MOBILE_MORE_SECTIONS } from '@/lib/navigation'
 import { AppScreen } from '@/components/layout/AppScreen'
 import { MoreSection } from '@/components/navigation/MoreNavRow'
-import { Card, MutedText } from '@/components/ui'
 
 export default function MoreScreen() {
   return (
@@ -12,15 +11,6 @@ export default function MoreScreen() {
         contentContainerStyle={{ flexGrow: 1, paddingBottom: 96 }}
         showsVerticalScrollIndicator={false}
       >
-        <Card className="mb-5 bg-teal-50 dark:bg-teal-950/30">
-          <Text className="text-sm font-medium text-teal-800 dark:text-teal-200">
-            Home, Brokers, Channels, and Signals are in the tab bar. Trades and Backtest are listed below.
-          </Text>
-          <MutedText className="mt-1 text-xs">
-            Tap any item to navigate. Web-only pages open in your browser.
-          </MutedText>
-        </Card>
-
         {MOBILE_MORE_SECTIONS.map(section => (
           <MoreSection key={section.id} title={section.title} items={section.items} />
         ))}

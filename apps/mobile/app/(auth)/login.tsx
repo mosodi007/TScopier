@@ -1,17 +1,24 @@
 import { useState } from 'react'
-import { ScrollView, Text, View } from 'react-native'
-import { Link, router } from 'expo-router'
+import { View } from 'react-native'
+import { router, useLocalSearchParams } from 'expo-router'
 import * as WebBrowser from 'expo-web-browser'
 import { makeDeepLink, parseAuthTokensFromUrl } from '@/lib/linking'
 import { supabase } from '@/lib/supabase'
-import { ThemeToggle } from '@/components/ThemeToggle'
-import { AccentText, Button, ErrorText, Field, Screen, Subtitle, Title } from '@/components/ui'
+import { AuthAlert } from '@/components/auth/AuthAlert'
+import { AuthField, AuthHeading, AuthLink, AuthSubtitle } from '@/components/auth/AuthField'
+import { AuthOrDivider } from '@/components/auth/AuthOrDivider'
+import { GoogleSignInButton } from '@/components/auth/GoogleSignInButton'
+import { AuthScreen } from '@/components/auth/AuthScreen'
+import { PasswordField } from '@/components/auth/PasswordField'
+import { Button } from '@/components/ui'
 
 export default function LoginScreen() {
+  const { reset } = useLocalSearchParams<{ reset?: string }>()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
+  const [googleLoading, setGoogleLoading] = useState(false)
 
   const onLogin = async () => {
     setLoading(true)
@@ -27,68 +34,79 @@ export default function LoginScreen() {
 
   const onGoogle = async () => {
     setError(null)
-    const redirectTo = makeDeepLink('auth/callback')
-    const { data, error: oauthError } = await supabase.auth.signInWithOAuth({
-      provider: 'google',
-      options: { redirectTo, skipBrowserRedirect: true },
-    })
-    if (oauthError || !data.url) {
-      setError(oauthError?.message ?? 'Google sign-in failed')
-      return
-    }
-    const result = await WebBrowser.openAuthSessionAsync(data.url, redirectTo)
-    if (result.type === 'success' && result.url) {
-      const tokens = parseAuthTokensFromUrl(result.url)
-      if (tokens.accessToken && tokens.refreshToken) {
-        await supabase.auth.setSession({
-          access_token: tokens.accessToken,
-          refresh_token: tokens.refreshToken,
-        })
+    setGoogleLoading(true)
+    try {
+      const redirectTo = makeDeepLink('auth/callback')
+      const { data, error: oauthError } = await supabase.auth.signInWithOAuth({
+        provider: 'google',
+        options: { redirectTo, skipBrowserRedirect: true },
+      })
+      if (oauthError || !data.url) {
+        setError(oauthError?.message ?? 'Google sign-in failed')
+        return
       }
-      router.replace('/(app)/(tabs)/dashboard')
+      const result = await WebBrowser.openAuthSessionAsync(data.url, redirectTo)
+      if (result.type === 'success' && result.url) {
+        const tokens = parseAuthTokensFromUrl(result.url)
+        if (tokens.accessToken && tokens.refreshToken) {
+          await supabase.auth.setSession({
+            access_token: tokens.accessToken,
+            refresh_token: tokens.refreshToken,
+          })
+        }
+        router.replace('/(app)/(tabs)/dashboard')
+      }
+    } finally {
+      setGoogleLoading(false)
     }
   }
 
   return (
-    <Screen className="justify-center">
-      <View className="absolute right-4 top-4 z-10">
-        <ThemeToggle />
-      </View>
-      <ScrollView contentContainerClassName="flex-grow justify-center pb-8">
-        <Title>TScopier</Title>
-        <Subtitle>Sign in to monitor and control your copier</Subtitle>
+    <AuthScreen>
+      <AuthHeading>Log in to TScopier</AuthHeading>
+      <AuthSubtitle>
+        Don't have an account?{' '}
+        <AuthLink onPress={() => router.push('/(auth)/signup')}>Sign up</AuthLink>
+      </AuthSubtitle>
 
-        <View className="mt-8">
-          <Field
-            label="Email"
-            autoCapitalize="none"
-            keyboardType="email-address"
-            value={email}
-            onChangeText={setEmail}
-            placeholder="you@example.com"
-          />
-          <Field
-            label="Password"
-            secureTextEntry
-            value={password}
-            onChangeText={setPassword}
-            placeholder="••••••••"
-          />
-          <ErrorText>{error}</ErrorText>
-          <Button label="Sign in" loading={loading} onPress={onLogin} />
-          <View className="mt-3">
-            <Button label="Continue with Google" variant="secondary" onPress={onGoogle} />
-          </View>
-          <View className="mt-6 flex-row justify-between">
-            <Link href="/(auth)/forgot-password">
-              <AccentText>Forgot password?</AccentText>
-            </Link>
-            <Link href="/(auth)/signup">
-              <AccentText>Create account</AccentText>
-            </Link>
-          </View>
-        </View>
-      </ScrollView>
-    </Screen>
+      {reset === 'success' ? (
+        <AuthAlert variant="success">
+          Your password has been updated. You can sign in now.
+        </AuthAlert>
+      ) : null}
+      {error ? <AuthAlert>{error}</AuthAlert> : null}
+
+      <GoogleSignInButton onPress={() => void onGoogle()} loading={googleLoading} disabled={loading} />
+      <AuthOrDivider />
+
+      <AuthField
+        label="Email"
+        autoCapitalize="none"
+        keyboardType="email-address"
+        autoComplete="email"
+        value={email}
+        onChangeText={setEmail}
+        placeholder="you@example.com"
+      />
+      <PasswordField
+        label="Password"
+        value={password}
+        onChangeText={setPassword}
+        placeholder="Enter your password"
+        autoComplete="password"
+      />
+
+      <View className="-mt-1 mb-6 items-end">
+        <AuthLink onPress={() => router.push('/(auth)/forgot-password')}>Forgot password?</AuthLink>
+      </View>
+
+      <Button
+        label="Sign in"
+        loading={loading}
+        disabled={googleLoading}
+        onPress={() => void onLogin()}
+        className="rounded-lg"
+      />
+    </AuthScreen>
   )
 }

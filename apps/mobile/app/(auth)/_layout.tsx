@@ -1,6 +1,5 @@
 import { Stack } from 'expo-router'
 import { useTheme } from '@/context/ThemeContext'
-import { pageBackground } from '@/lib/tscTheme'
 
 export default function AuthLayout() {
   const { isDark } = useTheme()
@@ -9,7 +8,8 @@ export default function AuthLayout() {
     <Stack
       screenOptions={{
         headerShown: false,
-        contentStyle: { backgroundColor: pageBackground(isDark) },
+        animation: 'fade',
+        contentStyle: { backgroundColor: isDark ? '#0a0a0a' : '#ffffff' },
       }}
     >
       <Stack.Screen name="login" />

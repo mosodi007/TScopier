@@ -155,21 +155,9 @@ export const MOBILE_MORE_SECTIONS: MobileNavSection[] = [
     items: [
       {
         id: 'settings',
-        label: 'Profile & Settings',
+        label: 'Settings',
         icon: Settings,
         target: { kind: 'stack', href: '/(app)/settings' },
-      },
-      {
-        id: 'telegram',
-        label: 'Link Telegram',
-        icon: Radio,
-        target: { kind: 'stack', href: '/(app)/telegram-link' },
-      },
-      {
-        id: 'channel-config',
-        label: 'Channel Config',
-        icon: SlidersHorizontal,
-        target: { kind: 'stack', href: '/(app)/channel-config' },
       },
     ],
   },

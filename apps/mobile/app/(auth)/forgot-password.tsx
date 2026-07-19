@@ -1,10 +1,14 @@
 import { useState } from 'react'
-import { ScrollView, View } from 'react-native'
+import { Text, View } from 'react-native'
 import { router } from 'expo-router'
+import { Mail } from 'lucide-react-native'
 import { sendPasswordResetEmail } from '@tscopier/shared'
 import { makeDeepLink } from '@/lib/linking'
-import { ThemeToggle } from '@/components/ThemeToggle'
-import { AccentText, BodyText, Button, ErrorText, Field, Screen, Subtitle, Title } from '@/components/ui'
+import { AuthAlert } from '@/components/auth/AuthAlert'
+import { AuthField, AuthHeading, AuthLink, AuthSubtitle } from '@/components/auth/AuthField'
+import { AuthScreen } from '@/components/auth/AuthScreen'
+import { Button } from '@/components/ui'
+import { tscTheme } from '@/lib/tscTheme'
 
 export default function ForgotPasswordScreen() {
   const [email, setEmail] = useState('')
@@ -21,35 +25,58 @@ export default function ForgotPasswordScreen() {
     })
     setLoading(false)
     if (!result.ok) {
-      setError(result.error ?? 'Could not send reset email')
+      setError(result.error ?? 'Could not send reset email. Please try again in a moment.')
       return
     }
     setSent(true)
   }
 
   return (
-    <Screen className="justify-center">
-      <View className="absolute right-4 top-4 z-10">
-        <ThemeToggle />
-      </View>
-      <ScrollView contentContainerClassName="flex-grow justify-center pb-8">
-        <Title>Reset password</Title>
-        <Subtitle>We will email you a secure reset link</Subtitle>
-        <View className="mt-8">
-          {sent ? (
-            <BodyText>Check your inbox for a reset link.</BodyText>
-          ) : (
-            <>
-              <Field label="Email" autoCapitalize="none" keyboardType="email-address" value={email} onChangeText={setEmail} />
-              <ErrorText>{error}</ErrorText>
-              <Button label="Send reset link" loading={loading} onPress={onSubmit} />
-            </>
-          )}
-          <View className="mt-6">
-            <AccentText onPress={() => router.back()}>Back to sign in</AccentText>
+    <AuthScreen>
+      {sent ? (
+        <View className="items-center py-6">
+          <View className="mb-5 h-14 w-14 items-center justify-center rounded-full bg-teal-50 dark:bg-teal-950/50">
+            <Mail size={26} color={tscTheme.primary} />
           </View>
+          <AuthHeading>Check your email</AuthHeading>
+          <Text className="mt-2 text-center text-sm text-neutral-500 dark:text-neutral-400">
+            {`If an account exists for ${email}, you will receive a password reset link shortly.`}
+          </Text>
+          <Text className="mt-3 text-center text-xs text-neutral-400 dark:text-neutral-500">
+            Check your spam folder if you do not see it within a few minutes.
+          </Text>
         </View>
-      </ScrollView>
-    </Screen>
+      ) : (
+        <>
+          <AuthHeading>Reset your password</AuthHeading>
+          <AuthSubtitle>
+            Enter the email for your account. If it exists, we will send a link to reset your
+            password.
+          </AuthSubtitle>
+
+          {error ? <AuthAlert>{error}</AuthAlert> : null}
+
+          <AuthField
+            label="Email"
+            autoCapitalize="none"
+            keyboardType="email-address"
+            autoComplete="email"
+            value={email}
+            onChangeText={setEmail}
+            placeholder="you@example.com"
+          />
+          <Button
+            label="Send reset link"
+            loading={loading}
+            onPress={() => void onSubmit()}
+            className="rounded-lg"
+          />
+        </>
+      )}
+
+      <View className="mt-6 items-center">
+        <AuthLink onPress={() => router.replace('/(auth)/login')}>Back to login</AuthLink>
+      </View>
+    </AuthScreen>
   )
 }

@@ -6,6 +6,7 @@ import { useSubscription } from '@/context/SubscriptionContext'
 import { useTheme } from '@/context/ThemeContext'
 import { ThemeOption } from '@/components/ThemeToggle'
 import { StackScreen } from '@/components/layout/StackScreen'
+import { confirmDisconnectTelegram } from '@/lib/disconnectTelegram'
 import {
   AccentText,
   Button,
@@ -48,13 +49,15 @@ export default function SettingsScreen() {
         </Card>
 
         <Card>
-          <HeadingText className="mb-2">Setup</HeadingText>
-          <View className="gap-2">
-            <Button label="Connect broker" variant="secondary" onPress={() => router.push('/(app)/broker-connect')} />
-            <Button label="Link Telegram" variant="secondary" onPress={() => router.push('/(app)/telegram-link')} />
-            <Button label="Copier status" variant="secondary" onPress={() => router.push('/(app)/copier-status')} />
-            <Button label="Channel config" variant="secondary" onPress={() => router.push('/(app)/channel-config')} />
-          </View>
+          <HeadingText className="mb-2">Telegram</HeadingText>
+          <MutedText className="mb-3 text-sm">
+            Disconnect removes your Telegram session. Configured channels are kept.
+          </MutedText>
+          <Button
+            label="Disconnect Telegram"
+            variant="danger"
+            onPress={() => confirmDisconnectTelegram(user?.id)}
+          />
         </Card>
 
         <Card>
