@@ -89,6 +89,9 @@ export default function DashboardScreen() {
         contentContainerClassName="gap-4 pb-24"
         showsVerticalScrollIndicator={false}
       >
+        <SubscriptionWarningBanner />
+        <TelegramConnectBanner />
+
         {loading && brokers.length === 0 ? (
           <View className="items-center py-16">
             <ActivityIndicator color={tscTheme.primary} size="large" />
@@ -151,9 +154,6 @@ export default function DashboardScreen() {
             </View>
           </Card>
         )}
-
-        <SubscriptionWarningBanner />
-        <TelegramConnectBanner />
 
         <TradeVolumeChart data={tradeVolume7Day} loading={chartsLoading} />
         <ChannelProfitChart data={channelProfit7d} loading={chartsLoading} />
