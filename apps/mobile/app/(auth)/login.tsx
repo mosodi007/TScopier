@@ -5,6 +5,7 @@ import * as WebBrowser from 'expo-web-browser'
 import { makeDeepLink, parseAuthTokensFromUrl } from '@/lib/linking'
 import { supabase } from '@/lib/supabase'
 import { AuthAlert } from '@/components/auth/AuthAlert'
+import { AuthBackHome } from '@/components/auth/AuthBackHome'
 import { AuthField, AuthHeading, AuthLink, AuthSubtitle } from '@/components/auth/AuthField'
 import { AuthOrDivider } from '@/components/auth/AuthOrDivider'
 import { GoogleSignInButton } from '@/components/auth/GoogleSignInButton'
@@ -63,6 +64,7 @@ export default function LoginScreen() {
 
   return (
     <AuthScreen>
+      <AuthBackHome />
       <AuthHeading>Log in to TScopier</AuthHeading>
       <AuthSubtitle>
         Don't have an account?{' '}

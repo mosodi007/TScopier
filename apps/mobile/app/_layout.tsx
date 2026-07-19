@@ -13,6 +13,7 @@ import {
   useFonts,
 } from '@expo-google-fonts/instrument-sans'
 import { AuthProvider } from '@/context/AuthContext'
+import { LocaleProvider } from '@/context/LocaleContext'
 import { SubscriptionProvider } from '@/context/SubscriptionContext'
 import { NotificationsProvider } from '@/context/NotificationsContext'
 import { ThemeProvider, useTheme } from '@/context/ThemeContext'
@@ -41,6 +42,7 @@ function RootNavigation() {
       }}
     >
       <Stack.Screen name="index" />
+      <Stack.Screen name="welcome" options={{ animation: 'fade' }} />
       <Stack.Screen name="(auth)" />
       <Stack.Screen name="(app)" />
     </Stack>
@@ -71,14 +73,16 @@ export default function RootLayout() {
   return (
     <SafeAreaProvider>
       <ThemeProvider>
-        <AuthProvider>
-          <SubscriptionProvider>
-            <NotificationsProvider>
-              <ThemedStatusBar />
-              <RootNavigation />
-            </NotificationsProvider>
-          </SubscriptionProvider>
-        </AuthProvider>
+        <LocaleProvider>
+          <AuthProvider>
+            <SubscriptionProvider>
+              <NotificationsProvider>
+                <ThemedStatusBar />
+                <RootNavigation />
+              </NotificationsProvider>
+            </SubscriptionProvider>
+          </AuthProvider>
+        </LocaleProvider>
       </ThemeProvider>
     </SafeAreaProvider>
   )
