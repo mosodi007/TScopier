@@ -4,6 +4,12 @@ import { useAuth } from '@/context/AuthContext'
 import { useTheme } from '@/context/ThemeContext'
 import { pageBackground, tscTheme } from '@/lib/tscTheme'
 
+/** Keep tabs mounted under modal routes so navigation context is not wiped. */
+export const unstable_settings = {
+  anchor: '(tabs)',
+  initialRouteName: '(tabs)',
+}
+
 export default function AppLayout() {
   const { user, loading } = useAuth()
   const { isDark } = useTheme()

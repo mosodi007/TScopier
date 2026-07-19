@@ -7,7 +7,20 @@ import {
   View,
 } from 'react-native'
 import { router, useLocalSearchParams } from 'expo-router'
-import { X } from 'lucide-react-native'
+import {
+  Coins,
+  Filter,
+  Pencil,
+  Plus,
+  Radio,
+  ScrollText,
+  Settings2,
+  Sparkles,
+  Target,
+  Wallet,
+  X,
+  type LucideIcon,
+} from 'lucide-react-native'
 import type { BrokerAccount, ManualSettings } from '@tscopier/shared'
 import {
   type ChannelFilters,
@@ -23,8 +36,10 @@ import { ConfigureFiltersTab } from '@/components/configure/ConfigureFiltersTab'
 import { ConfigureInstructionsTab } from '@/components/configure/ConfigureInstructionsTab'
 import { ConfigureManagementTab } from '@/components/configure/ConfigureManagementTab'
 import { ConfigureRiskTab } from '@/components/configure/ConfigureRiskTab'
+import { ConfigureSignalExamplesTab } from '@/components/configure/ConfigureSignalExamplesTab'
 import { ConfigureTargetsTab } from '@/components/configure/ConfigureTargetsTab'
 import { TextField } from '@/components/configure/formControls'
+import { AddTelegramChannelModal } from '@/components/channels/AddTelegramChannelModal'
 import { supabase } from '@/lib/supabase'
 import { tscTheme } from '@/lib/tscTheme'
 import { formatMoney } from '@/lib/formatMoney'
@@ -60,27 +75,27 @@ import { cn } from '@/lib/cn'
 type SupabaseClientLike = Parameters<typeof fetchBrokerChannelTradingConfigRows>[0]
 
 type ConfigTab =
+  | 'signal_examples'
+  | 'symbols'
+  | 'instructions'
   | 'risk'
   | 'stops'
   | 'management'
   | 'filters'
-  | 'symbols'
-  | 'instructions'
-  | 'signal_examples'
 
 interface ChannelOption {
   id: string
   display_name: string | null
 }
 
-const TABS: Array<{ id: ConfigTab; label: string }> = [
-  { id: 'risk', label: 'Risk' },
-  { id: 'stops', label: 'Targets' },
-  { id: 'management', label: 'Management' },
-  { id: 'filters', label: 'Filters' },
-  { id: 'symbols', label: 'Symbols' },
-  { id: 'instructions', label: 'Instructions' },
-  { id: 'signal_examples', label: 'Examples' },
+const TABS: Array<{ id: ConfigTab; label: string; icon: LucideIcon }> = [
+  { id: 'signal_examples', label: 'Signal Examples', icon: Sparkles },
+  { id: 'symbols', label: 'Symbols', icon: Coins },
+  { id: 'instructions', label: 'Instructions', icon: ScrollText },
+  { id: 'risk', label: 'Risk', icon: Wallet },
+  { id: 'stops', label: 'Targets', icon: Target },
+  { id: 'management', label: 'Management', icon: Settings2 },
+  { id: 'filters', label: 'Filters', icon: Filter },
 ]
 
 function symbolsToInput(value: string | null | undefined): string {
@@ -110,8 +125,11 @@ export default function BrokerConfigScreen() {
   const [error, setError] = useState<string | null>(null)
   const [broker, setBroker] = useState<BrokerAccount | null>(null)
   const [channels, setChannels] = useState<ChannelOption[]>([])
+  const [draftChannelIds, setDraftChannelIds] = useState<string[]>([])
+  const [channelLinkEditMode, setChannelLinkEditMode] = useState(false)
+  const [addChannelOpen, setAddChannelOpen] = useState(false)
   const [selectedChannelId, setSelectedChannelId] = useState<string | null>(null)
-  const [activeTab, setActiveTab] = useState<ConfigTab>('risk')
+  const [activeTab, setActiveTab] = useState<ConfigTab>('signal_examples')
   const [drafts, setDrafts] = useState<Record<string, ManualSettings>>({})
   const [filterDrafts, setFilterDrafts] = useState<Record<string, ChannelFilters>>({})
 
@@ -166,6 +184,8 @@ export default function BrokerConfigScreen() {
 
     setBroker(mergedBroker)
     setChannels(channelRows)
+    setDraftChannelIds(linkedIds)
+    setChannelLinkEditMode(false)
     setDrafts(nextDrafts)
     setFilterDrafts(nextFilters)
     setSelectedChannelId(linkedIds[0] ?? null)
@@ -177,10 +197,9 @@ export default function BrokerConfigScreen() {
   }, [load])
 
   const linkedChannels = useMemo(() => {
-    if (!broker) return []
-    const ids = new Set(normalizeBrokerChannelIds(broker))
+    const ids = new Set(draftChannelIds)
     return channels.filter(ch => ids.has(ch.id))
-  }, [broker, channels])
+  }, [channels, draftChannelIds])
 
   const selectedChannel = linkedChannels.find(ch => ch.id === selectedChannelId) ?? null
   const accountType = broker ? resolveBrokerAccountType(broker) : undefined
@@ -190,6 +209,36 @@ export default function BrokerConfigScreen() {
   const channelFilters =
     (selectedChannelId ? filterDrafts[selectedChannelId] : null) ??
     defaultChannelFiltersForPlan(keywordFiltersEnabled)
+
+  const ensureChannelDrafts = (channelId: string) => {
+    setDrafts(prev => {
+      if (prev[channelId]) return prev
+      return {
+        ...prev,
+        [channelId]: ensurePersistedManualSettings(DEFAULT_MANUAL_SETTINGS),
+      }
+    })
+    setFilterDrafts(prev => {
+      if (prev[channelId]) return prev
+      return {
+        ...prev,
+        [channelId]: defaultChannelFiltersForPlan(keywordFiltersEnabled),
+      }
+    })
+  }
+
+  const toggleDraftChannel = (channelId: string) => {
+    const linked = draftChannelIds.includes(channelId)
+    const next = linked
+      ? draftChannelIds.filter(id => id !== channelId)
+      : [...draftChannelIds, channelId]
+
+    if (!linked) ensureChannelDrafts(channelId)
+
+    setDraftChannelIds(next)
+    if (!linked && !selectedChannelId) setSelectedChannelId(channelId)
+    if (linked && selectedChannelId === channelId) setSelectedChannelId(next[0] ?? null)
+  }
 
   const patchSettings = (patch: Partial<ManualSettings>) => {
     if (!selectedChannelId) return
@@ -209,7 +258,7 @@ export default function BrokerConfigScreen() {
 
   const save = async () => {
     if (!user?.id || !broker) return
-    const linkedIds = normalizeBrokerChannelIds(broker)
+    const linkedIds = draftChannelIds
     if (linkedIds.length === 0) {
       setError('Link at least one channel to this broker before saving.')
       return
@@ -273,6 +322,7 @@ export default function BrokerConfigScreen() {
       supabase
         .from('broker_accounts')
         .update({
+          signal_channel_ids: linkedIds,
           channel_trading_configs: nextConfigs,
           channel_message_filters: nextFilters,
           manual_settings: fallbackManual,
@@ -340,70 +390,174 @@ export default function BrokerConfigScreen() {
         </View>
       </View>
 
-      <View className="border-b border-neutral-200 px-4 py-3 dark:border-neutral-800">
-        <MutedText className="mb-2 text-xs font-semibold uppercase tracking-wide">Channels</MutedText>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerClassName="gap-2">
-          {linkedChannels.length === 0 ? (
-            <MutedText>No channels linked to this broker.</MutedText>
+      <View className="border-b border-neutral-100 bg-neutral-50 px-2 py-2 dark:border-neutral-800 dark:bg-neutral-900/60">
+        <View className="mb-2 flex-row items-center justify-between px-2">
+          <MutedText className="text-xs font-semibold uppercase tracking-wide">Channels</MutedText>
+          <View className="flex-row items-center gap-0.5">
+            <Pressable
+              onPress={() => setAddChannelOpen(true)}
+              hitSlop={8}
+              className="h-8 w-8 items-center justify-center rounded-md active:bg-neutral-100 dark:active:bg-neutral-800"
+              accessibilityLabel="Add channel"
+            >
+              <Plus size={14} color="#a3a3a3" />
+            </Pressable>
+            {channels.length > 0 ? (
+              <Pressable
+                onPress={() => setChannelLinkEditMode(v => !v)}
+                hitSlop={8}
+                className={cn(
+                  'h-8 w-8 items-center justify-center rounded-md',
+                  channelLinkEditMode
+                    ? 'bg-teal-100 dark:bg-teal-950/60'
+                    : 'active:bg-neutral-100 dark:active:bg-neutral-800',
+                )}
+                accessibilityLabel={
+                  channelLinkEditMode ? 'Done editing channels' : 'Edit linked channels'
+                }
+                accessibilityState={{ selected: channelLinkEditMode }}
+              >
+                <Pencil
+                  size={14}
+                  color={channelLinkEditMode ? tscTheme.primary : '#a3a3a3'}
+                />
+              </Pressable>
+            ) : null}
+          </View>
+        </View>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerClassName="gap-2 px-1">
+          {channels.length === 0 ? (
+            <MutedText className="px-2 py-2">No channels connected. Tap + to add one.</MutedText>
+          ) : channelLinkEditMode ? (
+            channels.map(channel => {
+              const linked = draftChannelIds.includes(channel.id)
+              const selected = channel.id === selectedChannelId
+              return (
+                <View key={channel.id} className="flex-row items-center gap-1">
+                  <Pressable
+                    onPress={() => toggleDraftChannel(channel.id)}
+                    hitSlop={6}
+                    className="h-8 w-8 items-center justify-center rounded-md border border-neutral-200 dark:border-neutral-700"
+                    accessibilityRole="checkbox"
+                    accessibilityState={{ checked: linked }}
+                    accessibilityLabel={linked ? 'Unlink channel' : 'Link channel'}
+                  >
+                    <Text className="text-sm font-semibold text-teal-700 dark:text-teal-300">
+                      {linked ? '✓' : ''}
+                    </Text>
+                  </Pressable>
+                  <Pressable
+                    onPress={() => {
+                      if (!linked) toggleDraftChannel(channel.id)
+                      else setSelectedChannelId(channel.id)
+                    }}
+                    className={cn(
+                      'min-h-[44px] min-w-[160px] max-w-[220px] flex-row items-center gap-2 rounded-lg border px-2.5 py-2',
+                      selected
+                        ? 'border-teal-100 bg-white shadow-sm dark:border-teal-900/50 dark:bg-neutral-900'
+                        : linked
+                          ? 'border-transparent bg-transparent'
+                          : 'border-dashed border-neutral-200 dark:border-neutral-700',
+                    )}
+                  >
+                    <Radio
+                      size={16}
+                      color={selected ? tscTheme.primary : linked ? '#a3a3a3' : '#d4d4d4'}
+                    />
+                    <Text
+                      numberOfLines={1}
+                      className={cn(
+                        'min-w-0 flex-1 text-sm',
+                        selected
+                          ? 'font-medium text-teal-700 dark:text-teal-300'
+                          : 'text-neutral-700 dark:text-neutral-300',
+                      )}
+                    >
+                      {channel.display_name ?? 'Channel'}
+                    </Text>
+                  </Pressable>
+                </View>
+              )
+            })
+          ) : linkedChannels.length === 0 ? (
+            <MutedText className="px-2 py-2">No channels linked. Tap the pencil to link channels.</MutedText>
           ) : (
             linkedChannels.map(channel => {
               const selected = channel.id === selectedChannelId
+              const radioColor = selected ? tscTheme.primary : '#a3a3a3'
               return (
                 <Pressable
                   key={channel.id}
                   onPress={() => setSelectedChannelId(channel.id)}
                   className={cn(
-                    'rounded-full border px-3 py-1.5',
+                    'min-h-[44px] min-w-[160px] max-w-[220px] flex-row items-center gap-2 rounded-lg border px-2.5 py-2',
                     selected
-                      ? 'border-teal-600 bg-teal-50 dark:border-teal-500 dark:bg-teal-950/50'
-                      : 'border-neutral-200 bg-white dark:border-neutral-700 dark:bg-neutral-900',
+                      ? 'border-teal-100 bg-white shadow-sm dark:border-teal-900/50 dark:bg-neutral-900'
+                      : 'border-transparent bg-transparent',
                   )}
                 >
+                  <Radio size={16} color={radioColor} />
                   <Text
+                    numberOfLines={1}
                     className={cn(
-                      'text-xs font-medium',
+                      'min-w-0 flex-1 text-sm',
                       selected
-                        ? 'text-teal-700 dark:text-teal-400'
-                        : 'text-neutral-600 dark:text-neutral-300',
+                        ? 'font-medium text-teal-700 dark:text-teal-300'
+                        : 'text-neutral-700 dark:text-neutral-300',
                     )}
                   >
                     {channel.display_name ?? 'Channel'}
                   </Text>
+                  <BrokerBadge label="Connected" tone={selected ? 'primary' : 'neutral'} />
                 </Pressable>
               )
             })
           )}
         </ScrollView>
+        {channelLinkEditMode ? (
+          <MutedText className="mt-1 px-2 text-xs">
+            {draftChannelIds.length} channel{draftChannelIds.length === 1 ? '' : 's'} selected
+          </MutedText>
+        ) : null}
       </View>
 
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        className="border-b border-neutral-200 dark:border-neutral-800"
-      >
-        <View className="flex-row px-4">
-          {TABS.map(tab => {
-            const active = tab.id === activeTab
-            return (
-              <Pressable key={tab.id} onPress={() => setActiveTab(tab.id)} className="mr-4 py-3">
-                <Text
+      {selectedChannelId ? (
+        <View className="border-b border-neutral-100 bg-white dark:border-neutral-800 dark:bg-neutral-900">
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerClassName="flex-row items-stretch px-2"
+          >
+            {TABS.map(tab => {
+              const active = tab.id === activeTab
+              const Icon = tab.icon
+              const iconColor = active ? tscTheme.primary : '#a3a3a3'
+              return (
+                <Pressable
+                  key={tab.id}
+                  onPress={() => setActiveTab(tab.id)}
                   className={cn(
-                    'text-sm font-medium',
-                    active
-                      ? 'text-teal-600 dark:text-teal-400'
-                      : 'text-neutral-500 dark:text-neutral-400',
+                    'h-12 flex-row items-center gap-1.5 border-b-2 px-3',
+                    active ? 'border-teal-600' : 'border-transparent',
                   )}
                 >
-                  {tab.label}
-                </Text>
-                {active ? (
-                  <View className="mt-1 h-0.5 rounded-full bg-teal-600 dark:bg-teal-400" />
-                ) : null}
-              </Pressable>
-            )
-          })}
+                  <Icon size={14} color={iconColor} />
+                  <Text
+                    className={cn(
+                      'text-sm',
+                      active
+                        ? 'font-medium text-teal-700 dark:text-teal-400'
+                        : 'text-neutral-500 dark:text-neutral-400',
+                    )}
+                  >
+                    {tab.label}
+                  </Text>
+                </Pressable>
+              )
+            })}
+          </ScrollView>
         </View>
-      </ScrollView>
+      ) : null}
 
       <ScrollView
         contentContainerClassName="gap-4 px-4 py-4 pb-32"
@@ -415,11 +569,16 @@ export default function BrokerConfigScreen() {
           </Card>
         ) : (
           <>
+            {activeTab === 'signal_examples' && user?.id ? (
+              <ConfigureSignalExamplesTab channelId={selectedChannelId} userId={user.id} />
+            ) : null}
             {activeTab === 'risk' ? (
               <ConfigureRiskTab
                 settings={settings}
                 onChange={patchSettings}
                 allowMultiTrade={allowMultiTrade}
+                accountBalance={resolveBrokerTotalBalance(broker)}
+                currency={broker.last_currency}
               />
             ) : null}
             {activeTab === 'stops' ? (
@@ -463,15 +622,6 @@ export default function BrokerConfigScreen() {
                 keywordFiltersEnabled={keywordFiltersEnabled}
               />
             ) : null}
-            {activeTab === 'signal_examples' ? (
-              <Card className="gap-2">
-                <HeadingText className="text-base">Signal examples</HeadingText>
-                <MutedText>
-                  AI signal-example training still runs on the web Configure modal. Risk, Targets,
-                  Management, Filters, Symbols, and Instructions are fully editable here.
-                </MutedText>
-              </Card>
-            ) : null}
           </>
         )}
 
@@ -487,6 +637,28 @@ export default function BrokerConfigScreen() {
         />
         <Button label="Cancel" variant="secondary" onPress={() => router.back()} />
       </View>
+
+      <AddTelegramChannelModal
+        visible={addChannelOpen}
+        onClose={() => setAddChannelOpen(false)}
+        onAdded={row => {
+          setChannels(prev => {
+            if (prev.some(c => c.id === row.id)) {
+              return prev.map(c =>
+                c.id === row.id ? { id: row.id, display_name: row.display_name } : c,
+              )
+            }
+            return [{ id: row.id, display_name: row.display_name }, ...prev]
+          })
+          // Newly added channels are available to link; enter edit mode so the user can select them.
+          setChannelLinkEditMode(true)
+          if (!draftChannelIds.includes(row.id)) {
+            ensureChannelDrafts(row.id)
+            setDraftChannelIds(prev => [...prev, row.id])
+            if (!selectedChannelId) setSelectedChannelId(row.id)
+          }
+        }}
+      />
     </Screen>
   )
 }

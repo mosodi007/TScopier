@@ -22,6 +22,7 @@ const config = {
     bundleIdentifier: 'ai.tscopier.app',
     infoPlist: {
       UIBackgroundModes: ['remote-notification'],
+      ITSAppUsesNonExemptEncryption: false,
     },
     associatedDomains: ['applinks:app.tscopier.ai'],
   },

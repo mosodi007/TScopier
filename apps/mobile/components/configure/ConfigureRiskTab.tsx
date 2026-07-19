@@ -1,187 +1,353 @@
+import { useMemo, useState } from 'react'
+import { Pressable, Text, View } from 'react-native'
 import type { ManualSettings } from '@tscopier/shared'
 import {
-  ConfigSection,
+  estimateMultiTradeOrderCount,
+  formatMultiTradeTotalOpenTradesPreview,
+} from '@tscopier/web-lib/estimateMultiTradeOrders'
+import {
+  computeMinMultiTradeLegPercent,
+  resolveMultiTradePerLegLot,
+} from '@tscopier/web-lib/multiTradeLegUnits'
+import {
+  formatPreviewLotSize,
+  resolvePreviewManualLot,
+} from '@tscopier/web-lib/manualLotSizing'
+import { formatMoney } from '@/lib/formatMoney'
+import { MutedText } from '@/components/ui'
+import { RiskLotCalculatorModal } from '@/components/configure/RiskLotCalculatorModal'
+import {
+  ConfigPanel,
+  MonoPreview,
   NumberField,
-  SegmentedControl,
+  SelectField,
   SwitchRow,
+  TogglePanel,
   numberToInput,
   parseOptionalNumber,
 } from '@/components/configure/formControls'
-import { MutedText } from '@/components/ui'
 
 interface ConfigureRiskTabProps {
   settings: ManualSettings
   onChange: (patch: Partial<ManualSettings>) => void
   allowMultiTrade: boolean
+  accountBalance?: number | null
+  currency?: string | null
 }
 
-export function ConfigureRiskTab({ settings, onChange, allowMultiTrade }: ConfigureRiskTabProps) {
+export function ConfigureRiskTab({
+  settings,
+  onChange,
+  allowMultiTrade,
+  accountBalance,
+  currency,
+}: ConfigureRiskTabProps) {
+  const [lotCalcOpen, setLotCalcOpen] = useState(false)
+
   const tradeStyle = settings.trade_style === 'multi' ? 'multi' : 'single'
-  const riskMode = settings.risk_mode === 'dynamic_balance_percent' ? 'dynamic_balance_percent' : 'fixed_lot'
+  const riskMode =
+    settings.risk_mode === 'dynamic_balance_percent' ? 'dynamic_balance_percent' : 'fixed_lot'
   const singleTp = settings.single_tp_target ?? 'farthest'
 
+  const previewManualLot = useMemo(
+    () =>
+      resolvePreviewManualLot({
+        manualSettings: settings,
+        accountBalance,
+      }),
+    [settings, accountBalance],
+  )
+
+  const minLegPercent = useMemo(
+    () => computeMinMultiTradeLegPercent(previewManualLot),
+    [previewManualLot],
+  )
+
+  const legPercent = Number(settings.multi_trade_leg_percent ?? 5) || 5
+
+  const dynamicLotPreview = useMemo(() => {
+    if (riskMode !== 'dynamic_balance_percent') return null
+    const lotLabel = formatPreviewLotSize(previewManualLot)
+    const balance = Number(accountBalance ?? 0)
+    const percent = Number(settings.dynamic_balance_percent ?? 1) || 1
+    const hint =
+      balance > 0
+        ? `${lotLabel} lots from ${percent}% of ${formatMoney(balance, currency ?? 'USD')} balance`
+        : `${lotLabel} lots (using fixed-lot fallback — account balance not loaded)`
+    return { lotLabel, hint }
+  }, [riskMode, previewManualLot, accountBalance, settings.dynamic_balance_percent, currency])
+
+  const multiPreview = useMemo(() => {
+    return estimateMultiTradeOrderCount({
+      manualLot: previewManualLot,
+      legPercent,
+      range: settings.range_trading
+        ? {
+            enabled: true,
+            percent: Number(settings.range_percent ?? 50) || 50,
+            stepPips: Number(settings.range_step_pips ?? 3) || 3,
+            distancePips: Number(settings.range_distance_pips ?? 30) || 30,
+          }
+        : undefined,
+    })
+  }, [
+    previewManualLot,
+    legPercent,
+    settings.range_trading,
+    settings.range_percent,
+    settings.range_step_pips,
+    settings.range_distance_pips,
+  ])
+
+  const totalOpenTradesLabel = useMemo(() => {
+    const perLeg = resolveMultiTradePerLegLot({
+      manualLot: previewManualLot,
+      legPercent,
+    })
+    return formatMultiTradeTotalOpenTradesPreview(
+      perLeg,
+      multiPreview,
+      {
+        fallbackSingle:
+          '{lot} lots x 1 trade (split not possible at 0.01 min / 0.01 step preview)',
+        lotsXTrades: '{lot} lots x {total} trades',
+        lotsXTradesLayered:
+          '{lot} lots x {total} trades ({immediate} instant + {pending} for layering)',
+      },
+      formatPreviewLotSize,
+    )
+  }, [previewManualLot, legPercent, multiPreview])
+
+  const symbolHint =
+    settings.symbol_to_trade?.trim().split(/[,;\s]+/).filter(Boolean)[0]?.toUpperCase() ?? ''
+
   return (
-    <>
-      <ConfigSection
-        title="Trade style"
-        subtitle="Single Trade closes into one target. Multi Trades can split size across TP levels and optional range layering."
-      >
-        <SegmentedControl
+    <View className="gap-4">
+      {riskMode === 'fixed_lot' ? (
+        <View className="flex-row justify-end">
+          <Pressable onPress={() => setLotCalcOpen(true)} hitSlop={8}>
+            <Text className="text-sm text-teal-600 underline dark:text-teal-400">
+              Calculate risk / lot size
+            </Text>
+          </Pressable>
+        </View>
+      ) : null}
+
+      <View className="gap-3">
+        <SelectField
+          label="Trade Style"
+          hint="Single Entry: one order at your full configured lot. Range Trading: splits that lot into many smaller orders across the signal's take-profit levels."
           value={tradeStyle}
           onChange={next => {
             if (next === 'multi' && !allowMultiTrade) return
-            onChange({
-              trade_style: next,
-              range_trading: next === 'multi' ? settings.range_trading : false,
-            })
+            if (next === 'multi') {
+              onChange({ trade_style: next, use_signal_entry_price: false })
+            } else {
+              onChange({ trade_style: next, range_trading: false })
+            }
           }}
-          options={[
-            { id: 'single', label: 'Single Trade' },
-            { id: 'multi', label: allowMultiTrade ? 'Multi Trades' : 'Multi Trades (Advanced)' },
-          ]}
+          options={
+            allowMultiTrade
+              ? [
+                  { id: 'single', label: 'Single Entry' },
+                  { id: 'multi', label: 'Range Trading' },
+                ]
+              : [{ id: 'single', label: 'Single Entry' }]
+          }
         />
         {!allowMultiTrade ? (
-          <MutedText className="text-xs">Multi Trades / Range Trading requires an Advanced plan.</MutedText>
+          <MutedText className="text-xs">
+            Only Single trade mode allowed. Multi-Trade and Range Layering settings are available on
+            the Advanced plan.
+          </MutedText>
         ) : null}
-      </ConfigSection>
 
-      <ConfigSection title="Risk mode" subtitle="How lot size is calculated for new entries.">
-        <SegmentedControl
+        <SelectField
+          label="Risk Mode"
           value={riskMode}
           onChange={next => onChange({ risk_mode: next })}
           options={[
-            { id: 'fixed_lot', label: 'Fixed lot' },
-            { id: 'dynamic_balance_percent', label: '% of balance' },
+            { id: 'fixed_lot', label: 'Fixed Lot' },
+            { id: 'dynamic_balance_percent', label: 'Dynamic (% Balance)' },
           ]}
         />
-        {riskMode === 'fixed_lot' ? (
+
+        {riskMode === 'dynamic_balance_percent' ? (
+          <>
+            <NumberField
+              label="Dynamic (% Balance)"
+              value={numberToInput(settings.dynamic_balance_percent, '1')}
+              onChange={raw => {
+                const n = parseOptionalNumber(raw)
+                if (n != null) onChange({ dynamic_balance_percent: n })
+              }}
+              placeholder="1"
+            />
+            <MonoPreview
+              label="Lot size for this signal"
+              value={dynamicLotPreview?.lotLabel ?? '—'}
+              hint={dynamicLotPreview?.hint}
+            />
+          </>
+        ) : (
           <NumberField
-            label="Fixed lot"
+            label="Fixed Lot"
             value={numberToInput(settings.fixed_lot, '0.01')}
             onChange={raw => {
               const n = parseOptionalNumber(raw)
-              if (n != null) onChange({ fixed_lot: n })
+              if (n != null && n > 0) onChange({ fixed_lot: n })
             }}
             placeholder="0.01"
-            hint="Required. Must be greater than 0."
-          />
-        ) : (
-          <NumberField
-            label="Balance percent"
-            value={numberToInput(settings.dynamic_balance_percent, '1')}
-            onChange={raw => {
-              const n = parseOptionalNumber(raw)
-              if (n != null) onChange({ dynamic_balance_percent: n })
-            }}
-            placeholder="1"
-            hint="Percent of account balance used to size the trade."
           />
         )}
-      </ConfigSection>
+      </View>
 
-      {tradeStyle === 'single' ? (
-        <ConfigSection title="Single TP target" subtitle="Which take-profit level a single trade aims for.">
-          <SegmentedControl
+      {tradeStyle !== 'multi' ? (
+        <View className="gap-4">
+          <SelectField
+            label="Single TP target"
+            hint="Choose which TP the broker order should target in Single Trade mode. Earlier TP levels can still trigger partial closes based on your TP distribution."
             value={singleTp}
             onChange={next => onChange({ single_tp_target: next })}
             options={[
-              { id: 'farthest', label: 'Farthest TP' },
+              { id: 'farthest', label: 'Farthest TP (auto)' },
               { id: 'tp1', label: 'TP1' },
               { id: 'tp2', label: 'TP2' },
               { id: 'tp3', label: 'TP3' },
             ]}
           />
-          <SwitchRow
-            label="Use signal entry price"
-            hint="Compare live quote to signal entry ± pip tolerance before market fill."
-            value={settings.use_signal_entry_price === true}
-            onValueChange={next => onChange({ use_signal_entry_price: next })}
-          />
-          {settings.use_signal_entry_price ? (
+
+          <ConfigPanel title="Signal entry execution">
+            <TogglePanel
+              label="Use Signal Entry Price"
+              value={settings.use_signal_entry_price === true}
+              onValueChange={next => onChange({ use_signal_entry_price: next })}
+            >
+              <NumberField
+                label="Pip tolerance"
+                hint="Allowed distance from the signal entry level before entry is deferred."
+                value={numberToInput(settings.signal_entry_pip_tolerance, '10')}
+                onChange={raw => {
+                  const n = parseOptionalNumber(raw)
+                  if (n != null) onChange({ signal_entry_pip_tolerance: Math.max(0, n) })
+                }}
+                decimal={false}
+              />
+            </TogglePanel>
+          </ConfigPanel>
+        </View>
+      ) : (
+        <View className={allowMultiTrade ? 'gap-4' : 'relative gap-4 opacity-60'}>
+          <ConfigPanel
+            title="Range Trading"
+            subtitle="Splits your fixed lot into many smaller orders across the signal's TPs."
+          >
             <NumberField
-              label="Entry pip tolerance"
+              label="Per-leg size (% of fixed lot)"
+              value={numberToInput(settings.multi_trade_leg_percent, '5')}
+              onChange={raw => {
+                const n = parseOptionalNumber(raw)
+                if (n == null) return
+                onChange({
+                  multi_trade_leg_percent: Math.max(minLegPercent, Math.min(100, n)),
+                })
+              }}
+              disabled={!allowMultiTrade}
+            />
+            <MonoPreview
+              label="Total Open Trades"
+              value={totalOpenTradesLabel}
+              hint="How many trades the copier plans to open for one signal. Based on your configured lot size and per-leg size."
+            />
+          </ConfigPanel>
+
+          <TogglePanel
+            label="Trade Signal Range Only"
+            value={settings.use_signal_entry_range === true}
+            onValueChange={next => onChange({ use_signal_entry_range: next })}
+            disabled={!allowMultiTrade}
+          >
+            <NumberField
+              label="Pip tolerance"
+              hint="Extra pips beyond the zone bounds within which entry may still trigger."
               value={numberToInput(settings.signal_entry_pip_tolerance, '10')}
               onChange={raw => {
                 const n = parseOptionalNumber(raw)
-                if (n != null) onChange({ signal_entry_pip_tolerance: n })
+                if (n != null) onChange({ signal_entry_pip_tolerance: Math.max(0, n) })
               }}
+              decimal={false}
             />
-          ) : null}
-        </ConfigSection>
-      ) : (
-        <ConfigSection title="Multi Trades" subtitle="Split size across legs and optional range layering.">
-          <NumberField
-            label="Leg size (% of lot)"
-            value={numberToInput(settings.multi_trade_leg_percent, '5')}
-            onChange={raw => {
-              const n = parseOptionalNumber(raw)
-              if (n != null) onChange({ multi_trade_leg_percent: n })
-            }}
-            hint="Each leg uses this percent of the resolved fixed lot."
-          />
-          <SwitchRow
-            label="Use signal entry range"
-            hint="Wait for price/zone ± tolerance before filling multi-trade legs."
-            value={settings.use_signal_entry_range === true}
-            onValueChange={next => onChange({ use_signal_entry_range: next })}
-          />
-          <SwitchRow
-            label="Range trading"
-            hint="Reserve part of the basket for pending range layering."
+          </TogglePanel>
+
+          <TogglePanel
+            label="Range Layering"
             value={settings.range_trading === true}
             onValueChange={next => onChange({ range_trading: next })}
-          />
-          {settings.range_trading ? (
-            <>
-              <NumberField
-                label="Range percent"
-                value={numberToInput(settings.range_percent, '50')}
-                onChange={raw => {
-                  const n = parseOptionalNumber(raw)
-                  if (n != null) onChange({ range_percent: n })
-                }}
-              />
-              <NumberField
-                label="Range step (pips)"
-                value={numberToInput(settings.range_step_pips, '3')}
-                onChange={raw => {
-                  const n = parseOptionalNumber(raw)
-                  if (n != null) onChange({ range_step_pips: n })
-                }}
-              />
-              <NumberField
-                label="Range distance (pips)"
-                value={numberToInput(settings.range_distance_pips, '30')}
-                onChange={raw => {
-                  const n = parseOptionalNumber(raw)
-                  if (n != null) onChange({ range_distance_pips: n })
-                }}
-              />
-              <SwitchRow
-                label="Layer until basket flat"
-                value={settings.range_layer_till_close === true}
-                onValueChange={next => onChange({ range_layer_till_close: next })}
-              />
-            </>
-          ) : null}
-          <SwitchRow
-            label="Close worse entries"
-            hint="Auto-close immediate legs at a pip distance from the signal anchor."
-            value={settings.close_worse_entries === true}
-            onValueChange={next => onChange({ close_worse_entries: next })}
-          />
-          {settings.close_worse_entries ? (
+            disabled={!allowMultiTrade}
+          >
             <NumberField
-              label="Close worse entries (pips)"
-              value={numberToInput(settings.close_worse_entries_pips, '30')}
+              label="Reserved lot (% of total)"
+              hint="Share of total legs reserved as pendings."
+              value={numberToInput(settings.range_percent, '50')}
               onChange={raw => {
                 const n = parseOptionalNumber(raw)
-                if (n != null) onChange({ close_worse_entries_pips: n })
+                if (n != null) onChange({ range_percent: Math.max(0, Math.min(100, n)) })
               }}
             />
+            <NumberField
+              label="Step (pips per layering)"
+              hint="Pips between pendings."
+              value={numberToInput(settings.range_step_pips, '3')}
+              onChange={raw => {
+                const n = parseOptionalNumber(raw)
+                if (n != null) onChange({ range_step_pips: Math.max(1, n) })
+              }}
+              decimal={false}
+            />
+            <NumberField
+              label="Range distance (pips)"
+              hint={
+                settings.use_signal_entry_range
+                  ? 'Depth is taken from the signal entry zone when the signal includes one.'
+                  : 'How far the trade is layered from entry.'
+              }
+              value={numberToInput(settings.range_distance_pips, '30')}
+              onChange={raw => {
+                const n = parseOptionalNumber(raw)
+                if (n != null) onChange({ range_distance_pips: Math.max(1, n) })
+              }}
+              decimal={false}
+              disabled={settings.use_signal_entry_range === true}
+            />
+            <SwitchRow
+              label="Layer till close"
+              hint="On: range pending orders keep opening until the whole trade is closed. Off: pendings cancel after the first take-profit."
+              value={settings.range_layer_till_close === true}
+              onValueChange={next => onChange({ range_layer_till_close: next })}
+            />
+          </TogglePanel>
+
+          {!allowMultiTrade ? (
+            <View className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-3 dark:border-amber-900 dark:bg-amber-950/40">
+              <Text className="text-sm text-amber-900 dark:text-amber-200">
+                Only Single trade mode allowed. Multi-Trade and Range Layering settings are available
+                on the Advanced plan.
+              </Text>
+            </View>
           ) : null}
-        </ConfigSection>
+        </View>
       )}
-    </>
+
+      <RiskLotCalculatorModal
+        open={lotCalcOpen}
+        onClose={() => setLotCalcOpen(false)}
+        onApply={onChange}
+        manualSettings={settings}
+        initialBalance={accountBalance ?? null}
+        currency={currency}
+        symbol={symbolHint}
+        allowMultiTrade={allowMultiTrade}
+      />
+    </View>
   )
 }

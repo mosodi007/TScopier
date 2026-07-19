@@ -43,7 +43,6 @@ export function useDashboardMetrics(userId: string | undefined): DashboardMetric
       .from('broker_accounts')
       .select('*')
       .eq('user_id', userId)
-      .eq('is_active', true)
       .order('updated_at', { ascending: false })
     setBrokers((data ?? []) as BrokerAccount[])
   }, [userId])
