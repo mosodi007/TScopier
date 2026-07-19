@@ -3,7 +3,9 @@ import { Linking, Text, View } from 'react-native'
 import Constants from 'expo-constants'
 import { router } from 'expo-router'
 import * as WebBrowser from 'expo-web-browser'
+import { sendVerificationEmail } from '@tscopier/shared'
 import { makeDeepLink, parseAuthTokensFromUrl } from '@/lib/linking'
+import { webAppUrl } from '@/lib/openWebApp'
 import { supabase } from '@/lib/supabase'
 import { AuthAlert } from '@/components/auth/AuthAlert'
 import { AuthBackHome } from '@/components/auth/AuthBackHome'
@@ -31,6 +33,11 @@ export default function SignupScreen() {
 
   const onSignup = async () => {
     setError(null)
+    const trimmedEmail = email.trim().toLowerCase()
+    if (!trimmedEmail.includes('@')) {
+      setError('Enter a valid email address')
+      return
+    }
     if (password.length < 6) {
       setError('Password must be at least 6 characters')
       return
@@ -41,23 +48,53 @@ export default function SignupScreen() {
     }
 
     setLoading(true)
-    const { error: signUpError } = await supabase.auth.signUp({
-      email,
+    // Prefer HTTPS redirect so Supabase allow-list + email clients work; app opens via universal link.
+    const redirectTo = webAppUrl('auth/confirmed')
+    const { data, error: signUpError } = await supabase.auth.signUp({
+      email: trimmedEmail,
       password,
       options: {
-        emailRedirectTo: makeDeepLink('auth/confirmed'),
+        emailRedirectTo: redirectTo,
         data: {
           first_name: firstName.trim(),
           last_name: lastName.trim(),
         },
       },
     })
-    setLoading(false)
     if (signUpError) {
+      setLoading(false)
       setError(signUpError.message)
       return
     }
-    router.replace({ pathname: '/(auth)/verify-email', params: { email } })
+
+    if (data.user) {
+      // Same path as web: branded Resend email via edge function (Supabase built-in mail is not used).
+      const sent = await sendVerificationEmail({
+        email: data.user.email ?? trimmedEmail,
+        accessToken: data.session?.access_token,
+        redirectTo,
+      })
+      if (!sent.ok) {
+        const fallback = await supabase.auth.resend({
+          type: 'signup',
+          email: trimmedEmail,
+          options: { emailRedirectTo: redirectTo },
+        })
+        if (fallback.error) {
+          setLoading(false)
+          setError(sent.error ?? fallback.error.message)
+          return
+        }
+      }
+
+      // Keep the user signed out until they confirm (matches web).
+      if (!data.user.email_confirmed_at) {
+        await supabase.auth.signOut()
+      }
+    }
+
+    setLoading(false)
+    router.replace({ pathname: '/(auth)/verify-email', params: { email: trimmedEmail } })
   }
 
   const onGoogle = async () => {

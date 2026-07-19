@@ -25,6 +25,8 @@ import {
 } from '@/components/dashboard/logDisplay'
 import { AppScreen } from '@/components/layout/AppScreen'
 import { CopierPauseToggle } from '@/components/dashboard/CopierPauseToggle'
+import { TelegramConnectBanner } from '@/components/dashboard/TelegramConnectBanner'
+import { SubscriptionWarningBanner } from '@/components/dashboard/SubscriptionWarningBanner'
 import { Button, Card, HeadingText, pnlTextClass, MutedText } from '@/components/ui'
 import { formatMoney, formatSignedMoney, formatVsYesterdayDelta } from '@/lib/formatMoney'
 import { tscTheme } from '@/lib/tscTheme'
@@ -149,6 +151,9 @@ export default function DashboardScreen() {
             </View>
           </Card>
         )}
+
+        <SubscriptionWarningBanner />
+        <TelegramConnectBanner />
 
         <TradeVolumeChart data={tradeVolume7Day} loading={chartsLoading} />
         <ChannelProfitChart data={channelProfit7d} loading={chartsLoading} />

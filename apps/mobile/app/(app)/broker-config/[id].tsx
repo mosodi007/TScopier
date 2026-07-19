@@ -393,21 +393,22 @@ export default function BrokerConfigScreen() {
       <View className="border-b border-neutral-100 bg-neutral-50 px-2 py-2 dark:border-neutral-800 dark:bg-neutral-900/60">
         <View className="mb-2 flex-row items-center justify-between px-2">
           <MutedText className="text-xs font-semibold uppercase tracking-wide">Channels</MutedText>
-          <View className="flex-row items-center gap-0.5">
+          <View className="flex-row items-center gap-1">
             <Pressable
               onPress={() => setAddChannelOpen(true)}
               hitSlop={8}
-              className="h-8 w-8 items-center justify-center rounded-md active:bg-neutral-100 dark:active:bg-neutral-800"
+              className="h-8 flex-row items-center gap-1 rounded-md px-2 active:bg-neutral-100 dark:active:bg-neutral-800"
               accessibilityLabel="Add channel"
             >
               <Plus size={14} color="#a3a3a3" />
+              <Text className="text-xs font-medium text-neutral-500 dark:text-neutral-400">Add Channel</Text>
             </Pressable>
             {channels.length > 0 ? (
               <Pressable
                 onPress={() => setChannelLinkEditMode(v => !v)}
                 hitSlop={8}
                 className={cn(
-                  'h-8 w-8 items-center justify-center rounded-md',
+                  'h-8 flex-row items-center gap-1 rounded-md px-2',
                   channelLinkEditMode
                     ? 'bg-teal-100 dark:bg-teal-950/60'
                     : 'active:bg-neutral-100 dark:active:bg-neutral-800',
@@ -421,6 +422,16 @@ export default function BrokerConfigScreen() {
                   size={14}
                   color={channelLinkEditMode ? tscTheme.primary : '#a3a3a3'}
                 />
+                <Text
+                  className={cn(
+                    'text-xs font-medium',
+                    channelLinkEditMode
+                      ? 'text-teal-700 dark:text-teal-300'
+                      : 'text-neutral-500 dark:text-neutral-400',
+                  )}
+                >
+                  {channelLinkEditMode ? 'Done' : 'Edit'}
+                </Text>
               </Pressable>
             ) : null}
           </View>

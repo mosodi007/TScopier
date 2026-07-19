@@ -55,4 +55,4 @@ export function resolveTelegramAuthErrorMessage(
   return resolveTelegramAuthError(error, fallback, messages)
 }
 
-export { TELEGRAM_ALREADY_LINKED_ERROR }
+export { TELEGRAM_ALREADY_LINKED_ERROR, resolveTelegramAuthError } from './telegramAuthError'

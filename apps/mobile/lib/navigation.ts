@@ -56,18 +56,18 @@ export const MOBILE_MORE_SECTIONS: MobileNavSection[] = [
     title: 'Trading',
     items: [
       {
+        id: 'channels',
+        label: 'Channels',
+        icon: Radio,
+        target: { kind: 'tab', href: '/(app)/(tabs)/channels' },
+        description: 'Connect Telegram and manage signal channels',
+      },
+      {
         id: 'trades',
         label: 'Trades',
         icon: ChartNoAxesCombined,
         target: { kind: 'tab', href: '/(app)/(tabs)/trades' },
         description: 'Open and closed positions from linked brokers',
-      },
-      {
-        id: 'backtest',
-        label: 'Backtest',
-        icon: FlaskConical,
-        target: { kind: 'tab', href: '/(app)/(tabs)/backtest' },
-        description: 'Replay channel signals against market data',
       },
     ],
   },
@@ -163,17 +163,17 @@ export const MOBILE_MORE_SECTIONS: MobileNavSection[] = [
   },
 ]
 
-/** Bottom tab bar order (Home → Brokers → Channels → Signals → More). */
+/** Bottom tab bar order (Home → Brokers → Signals → Backtest → More). */
 export const TAB_SCREEN_ORDER = [
   'dashboard',
   'brokers',
-  'channels',
   'signals',
+  'backtest',
   'more',
 ] as const
 
 /** Hidden from the tab bar but still registered as tab routes (opened from More). */
-export const HIDDEN_TAB_SCREENS = ['trades', 'backtest'] as const
+export const HIDDEN_TAB_SCREENS = ['trades', 'channels'] as const
 
 export const TAB_NAV_META = {
   dashboard: { label: 'Home', icon: Home },
