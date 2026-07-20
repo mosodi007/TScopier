@@ -25,6 +25,10 @@ interface AppScreenProps {
   /** When true (default), show TScopier logo in the top bar unless `title` is set. */
   showBrandLogo?: boolean
   className?: string
+  /**
+   * When true, screen body can go edge-to-edge. Header + page title keep the same
+   * horizontal inset as other tabs so the brand logo stays aligned.
+   */
   noPadding?: boolean
 }
 
@@ -45,7 +49,7 @@ export function AppScreen({
   const hasHeader = Boolean(headerTitle || subtitle || !hideHeaderActions || headerTrailing)
 
   return (
-    <Screen className={cn(noPadding && 'px-0', className)}>
+    <Screen padded={!noPadding} className={className}>
       {hasHeader ? (
         <AppHeader
           title={headerTitle}

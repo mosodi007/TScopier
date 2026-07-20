@@ -9,15 +9,19 @@ interface TscopierLogoProps {
   height?: number
 }
 
-export function TscopierLogo({ style, height = 32 }: TscopierLogoProps) {
+/** Header wordmark size — keep in sync with AppHeader min height. */
+export const TSCOPIER_LOGO_HEADER_HEIGHT = 28
+
+export function TscopierLogo({ style, height = TSCOPIER_LOGO_HEADER_HEIGHT }: TscopierLogoProps) {
   const { isDark } = useTheme()
+  const width = Math.round(height * 4.2)
 
   return (
     <Image
       source={isDark ? logoDark : logoLight}
       accessibilityLabel="TScopier"
       resizeMode="contain"
-      style={[{ height, width: height * 4.2, maxWidth: '100%' }, style]}
+      style={[{ height, width, flexShrink: 0 }, style]}
     />
   )
 }

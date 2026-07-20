@@ -47,7 +47,7 @@ export function AppHeader({
     <View style={rowStyle} className={cn('mb-3', className)}>
       <View className="min-w-0 flex-1 flex-row items-center gap-1 pr-4">
         {leading ? <View className="shrink-0">{leading}</View> : null}
-        <View className="min-w-0 flex-1 justify-center">
+        <View className="min-w-0 flex-1 justify-center" style={{ overflow: 'visible' }}>
           {title != null
             ? typeof title === 'string'
               ? (
@@ -58,7 +58,11 @@ export function AppHeader({
                   {title}
                 </Text>
               )
-              : title
+              : (
+                <View style={{ alignSelf: 'flex-start', flexShrink: 0 }}>
+                  {title}
+                </View>
+              )
             : null}
           {subtitle ? (
             <Text

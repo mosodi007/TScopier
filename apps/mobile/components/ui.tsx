@@ -11,11 +11,24 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { cn } from '@/lib/cn'
 
-export function Screen({ children, className }: { children: React.ReactNode; className?: string }) {
+export function Screen({
+  children,
+  className,
+  /** When false, omit default horizontal padding (edge-to-edge content). */
+  padded = true,
+}: {
+  children: React.ReactNode
+  className?: string
+  padded?: boolean
+}) {
   return (
     <SafeAreaView
       edges={['top', 'left', 'right']}
-      className={cn('flex-1 bg-neutral-50 px-4 font-sans dark:bg-neutral-950', className)}
+      className={cn(
+        'flex-1 bg-neutral-50 font-sans dark:bg-neutral-950',
+        padded && 'px-4',
+        className,
+      )}
     >
       {children}
     </SafeAreaView>
