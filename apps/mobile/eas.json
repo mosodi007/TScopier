@@ -8,22 +8,30 @@
       "developmentClient": true,
       "distribution": "internal",
       "ios": {
-        "simulator": true
+        "simulator": true,
+        "image": "sdk-57"
       },
       "env": {
         "EXPO_PUBLIC_APP_SCHEME": "tscopier"
+      },
+      "cache": {
+        "disabled": true
       }
     },
     "preview": {
       "distribution": "internal",
       "ios": {
-        "simulator": false
+        "simulator": false,
+        "image": "sdk-57"
       },
       "channel": "preview"
     },
     "production": {
       "autoIncrement": true,
-      "channel": "production"
+      "channel": "production",
+      "ios": {
+        "image": "sdk-57"
+      }
     }
   },
   "submit": {
