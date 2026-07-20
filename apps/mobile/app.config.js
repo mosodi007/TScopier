@@ -89,6 +89,10 @@ const config = {
   },
   updates: {
     url: updatesUrl,
+    enabled: true,
+    checkAutomatically: 'ON_LOAD',
+    // Don't block first paint waiting for the network; JS hook still downloads in background.
+    fallbackToCacheTimeout: 0,
   },
   runtimeVersion: {
     policy: 'appVersion',

@@ -37,15 +37,92 @@ cd apps/mobile
 
    EAS writes `extra.eas.projectId` into `app.config.js` automatically.
 
-4. Build:
+4. **EAS environment variables (required for store builds)**  
+   Local `apps/mobile/.env` is gitignored and is **not** available on EAS Build.
+   Without these, the production app crashes (or shows a config error) on open.
+
+   In [expo.dev](https://expo.dev) → project **tscopier** → **Environment variables**,
+   add for **preview** and **production**:
+
+   | Name | Example |
+   |------|---------|
+   | `EXPO_PUBLIC_SUPABASE_URL` | `https://sso.tscopier.ai` or project URL |
+   | `EXPO_PUBLIC_SUPABASE_ANON_KEY` | anon/public key |
+   | `EXPO_PUBLIC_WORKER_URL` | Railway worker URL |
+   | `EXPO_PUBLIC_SUPABASE_REALTIME_URL` | optional custom realtime host |
+   | `EXPO_PUBLIC_APP_SCHEME` | `tscopier` |
+
+5. Build:
    - iOS simulator: `eas build --profile development --platform ios`
    - Internal testing: `eas build --profile preview --platform all`
    - Store release: `eas build --profile production --platform all`
-5. Submit:
+6. Submit:
    - iOS: `eas submit --platform ios --profile production`
    - Android: `eas submit --platform android --profile production`
 
-Update placeholder IDs in `eas.json` (`ascAppId`, `appleTeamId`, Google Play service account path).
+Optional in `eas.json` submit profile: `ascAppId` (App Store Connect Apple ID) and `appleTeamId`.
+
+## Over-the-air (OTA) updates
+
+Store builds already include `expo-updates` with:
+
+- **Channels:** `preview` and `production` (from `eas.json` build profiles)
+- **Runtime:** `appVersion` policy — OTA targets must match the binary’s `version` in `app.config.js` (e.g. `1.0.0`)
+- **Client:** checks on launch + when returning to foreground, downloads in the background, then prompts to restart
+- **Settings → App updates:** manual “Check for updates”
+
+### Publish an update
+
+JS/asset-only changes (screens, copy, bug fixes) can ship without a new binary:
+
+```bash
+cd apps/mobile
+
+# Internal / TestFlight-style channel
+npm run update:preview -- --message "Fix trades header logo"
+
+# App Store / production channel
+npm run update:production -- --message "Fix production crash on missing env"
+```
+
+Or:
+
+```bash
+eas update --channel production --environment production --message "Describe the fix"
+```
+
+Users on a matching binary restart (or tap Restart in the prompt) to load the update.
+
+### When you still need a new store build
+
+Bump `version` in `app.config.js` and run `eas build` when you change:
+
+- Native modules / Expo SDK / plugins
+- `app.config.js` native fields (permissions, bundle ID, splash, etc.)
+- Anything that cannot be expressed as a JS bundle
+
+After bumping the version, publish OTA against that new runtime:
+
+```bash
+eas update --channel production --environment production --message "Follow-up for 1.0.1"
+```
+
+### Bump app version
+
+Patch bump (`1.0.0` → `1.0.1`) across `app.config.js`, `package.json`, and `package-lock.json`:
+
+```bash
+npm run version:increment
+```
+
+Also available:
+
+```bash
+npm run version:increment:minor   # 1.0.1 → 1.1.0
+npm run version:increment:major   # 1.1.0 → 2.0.0
+```
+
+Because `runtimeVersion` uses the `appVersion` policy, OTA updates must target the new version after you ship a binary built with it.
 
 ## Supabase Auth redirect URLs
 

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { Alert, Linking, Platform, ScrollView, Switch, View } from 'react-native'
 import Constants from 'expo-constants'
 import { router } from 'expo-router'
+import * as Updates from 'expo-updates'
 import { useAuth } from '@/context/AuthContext'
 import { useSubscription } from '@/context/SubscriptionContext'
 import { useTheme } from '@/context/ThemeContext'
@@ -13,6 +14,11 @@ import {
   enableDevicePush,
   getPushPreference,
 } from '@/hooks/usePushNotifications'
+import {
+  checkAndApplyOtaUpdate,
+  getOtaUpdateInfo,
+  type OtaUpdateInfo,
+} from '@/hooks/useOTAUpdates'
 import {
   AccentText,
   Button,
@@ -30,6 +36,9 @@ export default function SettingsScreen() {
   const { theme, setTheme, isDark } = useTheme()
   const [pushEnabled, setPushEnabled] = useState(true)
   const [pushBusy, setPushBusy] = useState(false)
+  const [otaBusy, setOtaBusy] = useState(false)
+  const [otaInfo, setOtaInfo] = useState<OtaUpdateInfo>(() => getOtaUpdateInfo())
+  const appVersion = Constants.expoConfig?.version ?? '—'
   const extra = Constants.expoConfig?.extra as {
     privacyPolicyUrl?: string
     termsUrl?: string
@@ -38,6 +47,7 @@ export default function SettingsScreen() {
 
   useEffect(() => {
     void getPushPreference().then(setPushEnabled)
+    setOtaInfo(getOtaUpdateInfo())
   }, [])
 
   const onTogglePush = useCallback(
@@ -84,6 +94,30 @@ export default function SettingsScreen() {
     [pushBusy, user?.id],
   )
 
+  const onCheckUpdates = useCallback(async () => {
+    if (otaBusy) return
+    setOtaBusy(true)
+    try {
+      const result = await checkAndApplyOtaUpdate({ download: true, autoReload: false })
+      setOtaInfo(getOtaUpdateInfo())
+      if (result.status === 'ready') {
+        Alert.alert('Update ready', result.message, [
+          { text: 'Later', style: 'cancel' },
+          { text: 'Restart', onPress: () => void Updates.reloadAsync() },
+        ])
+      } else if (result.status === 'up-to-date') {
+        Alert.alert('Up to date', result.message)
+      } else {
+        Alert.alert(
+          result.status === 'error' ? 'Update check failed' : 'App updates',
+          result.message,
+        )
+      }
+    } finally {
+      setOtaBusy(false)
+    }
+  }, [otaBusy])
+
   return (
     <StackScreen title="Settings" subtitle={user?.email ?? undefined}>
       <ScrollView contentContainerClassName="mt-4 gap-4 pb-24">
@@ -109,6 +143,40 @@ export default function SettingsScreen() {
               disabled={pushBusy || !user?.id}
               trackColor={{ false: isDark ? '#334155' : '#cbd5e1', true: tscTheme.primary }}
               thumbColor="#ffffff"
+            />
+          </View>
+        </Card>
+
+        <Card>
+          <HeadingText className="mb-2">App updates</HeadingText>
+          <MutedText className="mb-3 text-sm">
+            Over-the-air updates deliver JS fixes without a new App Store build. Native changes still
+            require a store release.
+          </MutedText>
+          <LabelText>Version</LabelText>
+          <ValueText className="mt-1">{appVersion}</ValueText>
+          {otaInfo.enabled ? (
+            <View className="mt-2 gap-1">
+              <MutedText className="text-xs">
+                Channel: {otaInfo.channel ?? '—'} · Runtime: {otaInfo.runtimeVersion ?? '—'}
+              </MutedText>
+              <MutedText className="text-xs">
+                {otaInfo.isEmbeddedLaunch
+                  ? 'Running embedded build'
+                  : `Update ${otaInfo.updateId?.slice(0, 8) ?? '—'}`}
+              </MutedText>
+            </View>
+          ) : (
+            <MutedText className="mt-2 text-xs">
+              OTA is inactive in Expo Go / local development.
+            </MutedText>
+          )}
+          <View className="mt-3">
+            <Button
+              label={otaBusy ? 'Checking…' : 'Check for updates'}
+              variant="secondary"
+              onPress={() => void onCheckUpdates()}
+              disabled={otaBusy || !otaInfo.enabled}
             />
           </View>
         </Card>

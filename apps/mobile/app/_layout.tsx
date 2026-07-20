@@ -17,8 +17,11 @@ import { LocaleProvider } from '@/context/LocaleContext'
 import { SubscriptionProvider } from '@/context/SubscriptionContext'
 import { NotificationsProvider } from '@/context/NotificationsContext'
 import { ThemeProvider, useTheme } from '@/context/ThemeContext'
+import { MissingConfigScreen } from '@/components/layout/MissingConfigScreen'
 import { useAuthDeepLink } from '@/hooks/useAuthDeepLink'
 import { usePushNotifications } from '@/hooks/usePushNotifications'
+import { useOTAUpdates } from '@/hooks/useOTAUpdates'
+import { isSupabaseConfigured, supabaseConfigMessage } from '@/lib/supabase'
 import { pageBackground } from '@/lib/tscTheme'
 import { applyDefaultAppFont } from '@/lib/setupDefaultFont'
 
@@ -32,6 +35,7 @@ function ThemedStatusBar() {
 function RootNavigation() {
   useAuthDeepLink()
   usePushNotifications()
+  useOTAUpdates()
   const { isDark } = useTheme()
 
   return (
@@ -68,6 +72,14 @@ export default function RootLayout() {
 
   if (!fontsLoaded && !fontError) {
     return null
+  }
+
+  if (!isSupabaseConfigured) {
+    return (
+      <SafeAreaProvider>
+        <MissingConfigScreen message={supabaseConfigMessage ?? 'Missing Supabase config.'} />
+      </SafeAreaProvider>
+    )
   }
 
   return (

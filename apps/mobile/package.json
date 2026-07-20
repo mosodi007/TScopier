@@ -13,6 +13,11 @@
     "web": "expo start --web",
     "build": "expo export",
     "typecheck": "tsc --noEmit",
+    "version:increment": "node scripts/increment-version.js",
+    "version:increment:minor": "node scripts/increment-version.js minor",
+    "version:increment:major": "node scripts/increment-version.js major",
+    "update:preview": "eas update --channel preview --environment preview",
+    "update:production": "eas update --channel production --environment production",
     "postinstall": "patch-package && node ../../packages/web-lib/scripts/link-web-lib-packages.js"
   },
   "dependencies": {

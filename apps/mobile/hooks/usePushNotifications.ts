@@ -13,15 +13,19 @@ const PUSH_PREF_KEY = 'tscopier.push.enabled'
 /** Latest Expo push token registered on this device (for Settings disable). */
 let devicePushToken: string | null = null
 
-Notifications.setNotificationHandler({
-  handleNotification: async () => ({
-    shouldShowAlert: true,
-    shouldPlaySound: true,
-    shouldSetBadge: true,
-    shouldShowBanner: true,
-    shouldShowList: true,
-  }),
-})
+try {
+  Notifications.setNotificationHandler({
+    handleNotification: async () => ({
+      shouldShowAlert: true,
+      shouldPlaySound: true,
+      shouldSetBadge: true,
+      shouldShowBanner: true,
+      shouldShowList: true,
+    }),
+  })
+} catch (e) {
+  console.warn('[push] setNotificationHandler failed', e)
+}
 
 export async function getPushPreference(): Promise<boolean> {
   try {

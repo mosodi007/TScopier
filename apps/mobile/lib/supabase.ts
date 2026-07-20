@@ -15,11 +15,12 @@ const realtimeOverride =
   readEnv('EXPO_PUBLIC_SUPABASE_REALTIME_URL')
   || readEnv('VITE_SUPABASE_REALTIME_URL')
 
-if (!supabaseUrl || !supabaseAnonKey) {
-  throw new Error(
-    'Missing Supabase config. Set EXPO_PUBLIC_SUPABASE_URL and EXPO_PUBLIC_SUPABASE_ANON_KEY in apps/mobile/.env, then restart Metro (npm start).',
-  )
-}
+/** False when EAS/production build was missing EXPO_PUBLIC_* secrets. */
+export const isSupabaseConfigured = Boolean(supabaseUrl && supabaseAnonKey)
+
+export const supabaseConfigMessage = isSupabaseConfigured
+  ? null
+  : 'Missing Supabase config. Set EXPO_PUBLIC_SUPABASE_URL and EXPO_PUBLIC_SUPABASE_ANON_KEY as EAS environment variables (or apps/mobile/.env for local), then rebuild.'
 
 function normalizeRealtimeEndpoint(raw: string): string {
   const trimmed = raw.replace(/\/$/, '')
@@ -52,16 +53,26 @@ const SecureStoreAdapter = {
   removeItem: (key: string) => SecureStore.deleteItemAsync(key),
 }
 
-export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
-  auth: {
-    storage: SecureStoreAdapter,
-    autoRefreshToken: true,
-    persistSession: true,
-    detectSessionInUrl: false,
+/**
+ * Always export a client so module importers don't crash.
+ * When misconfigured, RootLayout shows a config screen and never mounts auth.
+ */
+export const supabase: SupabaseClient = createClient(
+  supabaseUrl || 'https://invalid.local',
+  supabaseAnonKey || 'invalid',
+  {
+    auth: {
+      storage: SecureStoreAdapter,
+      autoRefreshToken: isSupabaseConfigured,
+      persistSession: isSupabaseConfigured,
+      detectSessionInUrl: false,
+    },
+    realtime: {
+      disconnectOnEmptyChannelsAfterMs: 60_000,
+    },
   },
-  realtime: {
-    disconnectOnEmptyChannelsAfterMs: 60_000,
-  },
-})
+)
 
-applyOptionalRealtimeEndpoint(supabase, supabaseAnonKey)
+if (isSupabaseConfigured) {
+  applyOptionalRealtimeEndpoint(supabase, supabaseAnonKey)
+}
