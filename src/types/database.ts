@@ -459,9 +459,13 @@ export interface TelegramSession {
 /** Worker-only row for Telegram login between send_code and verify_code. */
 export interface TelegramAuthPending {
   user_id: string
-  phone: string
-  phone_code_hash: string
+  phone: string | null
+  phone_code_hash: string | null
   expires_at: string
+  awaiting_password: boolean
+  auth_session_string: string | null
+  auth_method: 'phone' | 'qr' | 'mtproto_hold'
+  qr_expires_at: string | null
 }
 
 export interface TelegramChannel {

@@ -67,7 +67,7 @@ export function TelegramLinkStep({ onDone }: Props) {
         {},
       )
       if (!ok || !data.qr_url) {
-        setError(resolveTelegramAuthErrorMessage(data.error, ce.failedStartQr, ce))
+        setError(resolveTelegramAuthErrorMessage(data, ce.failedStartQr, ce))
         return
       }
       setQrUrl(data.qr_url)
@@ -104,7 +104,7 @@ export function TelegramLinkStep({ onDone }: Props) {
         }
         if (data.status === 'error' || (!ok && data.error)) {
           setQrWaiting(false)
-          setError(resolveTelegramAuthErrorMessage(data.error, ce.failedStartQr, ce))
+          setError(resolveTelegramAuthErrorMessage(data, ce.failedStartQr, ce))
         }
       } catch {
         if (!cancelled) setError('Network error. Please try again.')
@@ -125,14 +125,14 @@ export function TelegramLinkStep({ onDone }: Props) {
     setLoading(true)
     try {
       const normalizedPhone = normalizeTelegramPhoneInput(phone)
-      const { ok, data } = await callTelegramAuth<Record<string, never>>(
+      const { ok, data } = await callTelegramAuth<{ delivery?: string }>(
         EDGE_FN,
         session?.access_token,
         'send_code',
         { phone: normalizedPhone },
       )
       if (!ok) {
-        setError(resolveTelegramAuthError(data.error, ce.failedSendCode, ce))
+        setError(resolveTelegramAuthError(data, ce.failedSendCode, ce))
         return
       }
       setPhone(normalizedPhone)
@@ -166,8 +166,8 @@ export function TelegramLinkStep({ onDone }: Props) {
         return
       }
       if (!ok || data.error) {
-        setError(resolveTelegramAuthError(data.error, ce.verificationFailed, ce))
-        if (isNoPendingPhoneAuthError(data.error)) {
+        setError(resolveTelegramAuthError(data, ce.verificationFailed, ce))
+        if (isNoPendingPhoneAuthError(data)) {
           setPassword('')
           setStage('phone')
         }
@@ -195,7 +195,7 @@ export function TelegramLinkStep({ onDone }: Props) {
         { password },
       )
       if (!ok || data.error) {
-        setError(resolveTelegramAuthErrorMessage(data.error, ce.verificationFailed, ce))
+        setError(resolveTelegramAuthErrorMessage(data, ce.verificationFailed, ce))
         return
       }
       if (data.session_id) handleLinked(data.session_id)

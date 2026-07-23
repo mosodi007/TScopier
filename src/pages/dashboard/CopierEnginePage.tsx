@@ -721,7 +721,7 @@ export function CopierEnginePage() {
       })
       const data = await res.json().catch(() => ({}))
       if (!res.ok || data.error) {
-        const msg = resolveTelegramAuthError(data.error, ce.failedSendCode, ce)
+        const msg = resolveTelegramAuthError(data, ce.failedSendCode, ce)
         setTgError(msg)
         return
       }
@@ -763,9 +763,9 @@ export function CopierEnginePage() {
         return
       }
       if (!res.ok || data.error) {
-        const msg = resolveTelegramAuthError(data.error, ce.verificationFailed, ce)
+        const msg = resolveTelegramAuthError(data, ce.verificationFailed, ce)
         setTgError(msg)
-        if (isNoPendingPhoneAuthError(data.error)) {
+        if (isNoPendingPhoneAuthError(data)) {
           setTgPassword('')
           setTgStage('phone')
         }

@@ -34,7 +34,7 @@ export async function callTelegramAuth<T>(
   accessToken: string | undefined,
   action: TelegramAuthAction,
   body: Record<string, unknown>,
-): Promise<{ ok: boolean; status: number; data: T & { error?: string } }> {
+): Promise<{ ok: boolean; status: number; data: T & { error?: string; message?: string; code?: string } }> {
   const res = await fetch(edgeFnUrl, {
     method: 'POST',
     headers: {
@@ -43,7 +43,7 @@ export async function callTelegramAuth<T>(
     },
     body: JSON.stringify({ action, ...body }),
   })
-  const data = await res.json().catch(() => ({})) as T & { error?: string }
+  const data = await res.json().catch(() => ({})) as T & { error?: string; message?: string; code?: string }
   return { ok: res.ok && !data.error, status: res.status, data }
 }
 
@@ -52,6 +52,13 @@ export function resolveTelegramAuthErrorMessage(
   fallback: string,
   messages: TelegramAuthErrorMessages,
 ): string {
+  if (error && typeof error === 'object') {
+    const rec = error as { code?: unknown; error?: unknown; message?: unknown }
+    if (rec.code === 'NO_PENDING_QR') {
+      return messages.noPendingQr ?? 'QR login expired. Please start again.'
+    }
+    return resolveTelegramAuthError(error, fallback, messages)
+  }
   if (error === 'NO_PENDING_QR') {
     return messages.noPendingQr ?? 'QR login expired. Please start again.'
   }

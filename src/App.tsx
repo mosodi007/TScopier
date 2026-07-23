@@ -1,5 +1,5 @@
-import { lazy, Suspense } from 'react'
-import { BrowserRouter, Routes, Route, Navigate, Outlet } from 'react-router-dom'
+import { lazy, Suspense, useLayoutEffect, type ReactNode } from 'react'
+import { BrowserRouter, Routes, Route, Navigate, Outlet, useLocation, useNavigate } from 'react-router-dom'
 import { AuthProvider } from './context/AuthContext'
 import { LocaleProvider } from './context/LocaleContext'
 import { UserProfileProvider } from './context/UserProfileContext'
@@ -18,6 +18,7 @@ import { GoogleAnalyticsRouteTracker } from './components/analytics/GoogleAnalyt
 import { CookieConsentBanner } from './components/marketing/CookieConsentBanner'
 import { AppTopBannersProvider } from './context/AppTopBannersProvider'
 import { AppTopBanners } from './components/layout/AppTopBanners'
+import { passwordRecoveryRedirectPath } from './lib/isPasswordRecoveryLink'
 
 const AppPricingPage = lazy(() =>
   import('./pages/pricing/AppPricingPage').then(m => ({ default: m.AppPricingPage })),
@@ -87,6 +88,19 @@ function DashboardRouteAnchor() {
   return null
 }
 
+function PasswordRecoveryStartupRedirect({ children }: { children: ReactNode }) {
+  const location = useLocation()
+  const navigate = useNavigate()
+  const redirectTo = passwordRecoveryRedirectPath(location)
+
+  useLayoutEffect(() => {
+    if (redirectTo) navigate(redirectTo, { replace: true })
+  }, [navigate, redirectTo])
+
+  if (redirectTo) return null
+  return <>{children}</>
+}
+
 export default function App() {
   return (
     <AuthProvider>
@@ -100,6 +114,7 @@ export default function App() {
         <div className="flex min-h-0 flex-1 flex-col overflow-hidden overscroll-none">
       <GoogleAnalyticsRouteTracker />
       <CookieConsentBanner />
+      <PasswordRecoveryStartupRedirect>
       <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
         <Routes>
           <Route path="/" element={<Navigate to="/dashboard" replace />} />
@@ -170,7 +185,8 @@ export default function App() {
           </Route>
         </Routes>
       </div>
-        </div>
+      </PasswordRecoveryStartupRedirect>
+          </div>
       </div>
       </SubscriptionProvider>
       </AppTopBannersProvider>

@@ -1,11 +1,32 @@
+type RecoveryLocation = {
+  pathname?: string
+  search?: string
+  hash?: string
+}
+
+function paramsFrom(raw: string | undefined): URLSearchParams {
+  return new URLSearchParams(String(raw ?? '').replace(/^[?#]/, ''))
+}
+
+function hasRecoveryParams(params: URLSearchParams): boolean {
+  const type = params.get('type')
+  if (type === 'recovery') return true
+  if (type && type !== 'recovery') return false
+  return params.has('token_hash')
+}
+
+export function isPasswordRecoveryLocation(location: RecoveryLocation): boolean {
+  return hasRecoveryParams(paramsFrom(location.hash))
+    || hasRecoveryParams(paramsFrom(location.search))
+}
+
+export function passwordRecoveryRedirectPath(location: RecoveryLocation): string | null {
+  if (!isPasswordRecoveryLocation(location)) return null
+  if ((location.pathname ?? '') === '/reset-password') return null
+  return `/reset-password${location.search ?? ''}${location.hash ?? ''}`
+}
+
 /** True when the current URL looks like a Supabase password-recovery redirect. */
 export function isPasswordRecoveryLink(): boolean {
-  const hash = new URLSearchParams(window.location.hash.replace(/^#/, ''))
-  if (hash.get('type') === 'recovery') return true
-
-  const query = new URLSearchParams(window.location.search)
-  if (query.get('type') === 'recovery') return true
-  if (query.get('token_hash')) return true
-
-  return false
+  return isPasswordRecoveryLocation(window.location)
 }
