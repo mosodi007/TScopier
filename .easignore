@@ -1,0 +1,43 @@
+# EAS upload ignore (monorepo root). When this file exists, .gitignore is not used for the archive.
+# Keep apps/mobile/ios source; exclude heavy/irrelevant paths.
+
+# Dependencies
+**/node_modules/
+
+# Expo / build caches
+**/.expo/
+**/dist/
+**/web-build/
+**/.turbo/
+**/.next/
+
+# Native artifacts (keep Podfile / Xcode project)
+**/ios/Pods/
+**/ios/build/
+**/ios/DerivedData/
+**/android/.gradle/
+**/android/build/
+**/android/app/build/
+
+# Repo areas not needed for mobile EAS builds
+apps/backoffice/
+telegram-listener/
+worker/
+supabase/
+docs/
+public/
+dist/
+
+# Secrets / local
+**/.env
+**/.env.*
+!**/.env.example
+**/*.jks
+**/*.p8
+**/*.p12
+**/*.mobileprovision
+
+# Misc
+**/.DS_Store
+**/*.log
+.git/

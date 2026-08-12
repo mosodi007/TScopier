@@ -36,6 +36,18 @@ yarn-error.*
 # typescript
 *.tsbuildinfo
 
-# generated native folders
-/ios
-/android
+# Native build artifacts only — keep ios/ and android/ source for EAS bare builds.
+# Ignoring the whole /ios folder made EAS upload a project with no Podfile, then
+# "Install pods" failed with spawn pod ENOENT.
+ios/Pods
+ios/Pods/**
+ios/build
+ios/build/**
+ios/DerivedData
+ios/DerivedData/**
+android/.gradle
+android/.gradle/**
+android/build
+android/build/**
+android/app/build
+android/app/build/**
