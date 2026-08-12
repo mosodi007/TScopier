@@ -94,9 +94,8 @@ const config = {
     // Don't block first paint waiting for the network; JS hook still downloads in background.
     fallbackToCacheTimeout: 0,
   },
-  runtimeVersion: {
-    policy: 'appVersion',
-  },
+  // Bare workflow (ios/ present) cannot use runtimeVersion policies.
+  runtimeVersion: '1.0.1',
 }
 
 module.exports = config

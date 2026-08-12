@@ -12,6 +12,15 @@ function readViteEnv(key: string): string {
   if (typeof fromMeta === 'string' && fromMeta.trim()) return fromMeta.trim()
   const fromProcess = readProcessEnv(key)
   if (fromProcess) return fromProcess
+
+  // Mobile consumes src/lib via packages/web-lib; accept Expo public env as fallback.
+  if (key.startsWith('VITE_')) {
+    const expoKey = `EXPO_PUBLIC_${key.slice('VITE_'.length)}`
+    const fromExpoMeta = import.meta.env?.[expoKey]
+    if (typeof fromExpoMeta === 'string' && fromExpoMeta.trim()) return fromExpoMeta.trim()
+    const fromExpoProcess = readProcessEnv(expoKey)
+    if (fromExpoProcess) return fromExpoProcess
+  }
   return ''
 }
 
@@ -20,12 +29,12 @@ const supabaseAnonKey = readViteEnv('VITE_SUPABASE_ANON_KEY')
 
 if (!supabaseUrl || !supabaseAnonKey) {
   const missing = [
-    !supabaseUrl && 'VITE_SUPABASE_URL',
-    !supabaseAnonKey && 'VITE_SUPABASE_ANON_KEY',
+    !supabaseUrl && 'VITE_SUPABASE_URL (or EXPO_PUBLIC_SUPABASE_URL)',
+    !supabaseAnonKey && 'VITE_SUPABASE_ANON_KEY (or EXPO_PUBLIC_SUPABASE_ANON_KEY)',
   ].filter(Boolean).join(', ')
   throw new Error(
-    `Missing ${missing}. For Netlify, set these under Site configuration → Environment variables ` +
-      `(names must start with VITE_), scope must include Builds, then trigger a new deploy.`,
+    `Missing ${missing}. For Netlify, set VITE_* under Site configuration → Environment variables ` +
+      `(scope must include Builds), then trigger a new deploy. For Expo, set EXPO_PUBLIC_* in apps/mobile/.env.`,
   )
 }
 

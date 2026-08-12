@@ -62,13 +62,17 @@ function readAppConfigVersion(source) {
 }
 
 function writeAppConfigVersion(source, from, to) {
-  const next = source.replace(
+  let next = source.replace(
     /\bversion:\s*['"]\d+\.\d+\.\d+['"]/,
     `version: '${to}'`,
   )
   if (next === source) {
     throw new Error(`Failed to replace version ${from} in app.config.js`)
   }
+  next = next.replace(
+    /\bruntimeVersion:\s*['"]\d+\.\d+\.\d+['"]/,
+    `runtimeVersion: '${to}'`,
+  )
   return next
 }
 
@@ -103,4 +107,4 @@ if (fs.existsSync(packageLockPath)) {
 
 console.log(`App version: ${appVersion} → ${nextVersion} (${bumpKind})`)
 console.log('Updated: app.config.js, package.json, package-lock.json')
-console.log('Note: runtimeVersion follows appVersion — publish OTA against this new version after store builds.')
+console.log('Note: runtimeVersion is set to the same string as version — publish OTA against this new version after store builds.')

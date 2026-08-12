@@ -2,6 +2,13 @@
 
 ## Changelog
 
+### 2026-08-12 — Mobile: fix Tabs ErrorBoundary crash (web supabase env)
+
+- **Symptom:** `Cannot read property 'ErrorBoundary' of undefined` on `app/(app)/(tabs)/_layout.tsx` after login.
+- **Root cause:** Dashboard imports `@tscopier/web-lib/*` (symlinked to `src/lib`). Those modules import `./supabase`, which is the **web** client and throws when `VITE_SUPABASE_*` is missing. Failed route load then surfaces as Expo Router's ErrorBoundary TypeError.
+- **Fix:** Metro aliases web-lib `./supabase` → `apps/mobile/lib/supabase.ts`. `src/lib/supabase.ts` also accepts `EXPO_PUBLIC_*` fallbacks.
+- Files: `apps/mobile/metro.config.js`, `src/lib/supabase.ts`
+
 ### 2026-08-12 — Fix marketing links becoming tscopier.ai/https://app.tscopier.ai/...
 
 - **Bug:** Sign in / Get started on `tscopier.ai` produced `https://tscopier.ai/https://app.tscopier.ai/login`. `appUrl('/login')` correctly returns the absolute app URL on the marketing host, then `withQuery()` treated that as a relative path (`/https://app.tscopier.ai/login`).
