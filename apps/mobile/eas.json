@@ -1,0 +1,56 @@
+{
+  "cli": {
+    "version": ">= 16.0.0",
+    "appVersionSource": "remote"
+  },
+  "build": {
+    "development": {
+      "developmentClient": true,
+      "distribution": "internal",
+      "ios": {
+        "simulator": true,
+        "image": "sdk-57"
+      },
+      "env": {
+        "EXPO_PUBLIC_APP_SCHEME": "tscopier"
+      },
+      "cache": {
+        "disabled": true
+      }
+    },
+    "preview": {
+      "distribution": "internal",
+      "environment": "preview",
+      "ios": {
+        "simulator": false,
+        "image": "sdk-57"
+      },
+      "channel": "preview",
+      "env": {
+        "EXPO_PUBLIC_APP_SCHEME": "tscopier"
+      }
+    },
+    "production": {
+      "autoIncrement": true,
+      "environment": "production",
+      "channel": "production",
+      "ios": {
+        "image": "sdk-57"
+      },
+      "env": {
+        "EXPO_PUBLIC_APP_SCHEME": "tscopier"
+      }
+    }
+  },
+  "submit": {
+    "production": {
+      "ios": {
+        "appleId": "tartarixinc@gmail.com"
+      },
+      "android": {
+        "serviceAccountKeyPath": "./google-play-service-account.json",
+        "track": "internal"
+      }
+    }
+  }
+}

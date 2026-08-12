@@ -1,0 +1,29 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --tsc-page: #f8fafc;
+    --tsc-surface: #ffffff;
+    --tsc-surface-muted: #f8fafc;
+    --tsc-border: #e2e8f0;
+    --tsc-text: #0f172a;
+    --tsc-text-muted: #64748b;
+  }
+
+  .dark {
+    --tsc-page: #020617;
+    --tsc-surface: #0f172a;
+    --tsc-surface-muted: #1e293b;
+    --tsc-border: #334155;
+    --tsc-text: #f8fafc;
+    --tsc-text-muted: #94a3b8;
+  }
+}
+
+@layer utilities {
+  .font-sans {
+    font-family: InstrumentSans_400Regular;
+  }
+}
