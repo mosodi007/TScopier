@@ -1,0 +1,1 @@
+{"project_id": "sxkpcovbyaficvtkpsdo", "name": "send-verification-email", "entrypoint_path": "send-verification-email/index.ts", "verify_jwt": false, "file_names": ["send-verification-email/index.ts", "_shared/signupAbuseGuard.ts", "_shared/emailSignupPolicy.ts", "_shared/authEmailLayout.ts", "_shared/brandEmailAssets.ts"]}

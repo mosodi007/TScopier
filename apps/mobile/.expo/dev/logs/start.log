@@ -1120,3 +1120,61 @@
 {"_e":"metro:client_log","_t":1786541946970,"level":"warn","data":["[push] Physical device required for push notifications"]}
 {"_e":"metro:client_log","_t":1786541947726,"level":"warn","data":["InteractionManager has been deprecated and will be removed in a future release. Please refactor long tasks into smaller ones, and  use 'requestIdleCallback' instead."]}
 {"_e":"metro:client_log","_t":1786543092064,"level":"warn","data":["[push] Physical device required for push notifications"]}
+{"_e":"root:init","_t":1786613473361,"format":"v0-jsonl","version":"57.0.9"}
+{"_e":"devserver:start","_t":1786613473383,"mode":"development","web":true,"baseUrl":"","asyncRoutes":false,"routerRoot":"../../../app","serverComponents":false,"serverActions":false,"serverRendering":true,"apiRoutes":false,"exporting":false}
+{"_e":"metro:config","_t":1786613474090,"serverRoot":"../../..","projectRoot":"../../..","exporting":false,"flags":{"autolinkingModuleResolution":false,"serverActions":false,"serverComponents":false,"reactCompiler":false,"optimizeGraph":false,"treeshaking":false,"logbox":false}}
+{"_e":"expo:dev-tools-plugin:load","_t":1786613474280,"plugins":[]}
+{"_e":"metro:instantiate","_t":1786613474795,"atlas":false,"workers":6,"host":"::","port":8081}
+{"_e":"metro:bundling:started","_t":1786613485978,"id":"1","platform":"ios","environment":null,"entry":"node_modules/expo-router/entry.js"}
+{"_e":"metro:bundling:progress","_t":1786613485979,"id":"1","progress":0,"total":1,"current":0}
+{"_e":"metro:bundling:progress","_t":1786613485988,"id":"1","progress":0,"total":1,"current":0}
+{"_e":"metro:bundling:progress","_t":1786613486088,"id":"1","progress":0.02215251487290427,"total":215,"current":32}
+{"_e":"metro:bundling:progress","_t":1786613486188,"id":"1","progress":0.14671008332631932,"total":436,"current":167}
+{"_e":"metro:bundling:progress","_t":1786613486288,"id":"1","progress":0.21269364692145698,"total":657,"current":303}
+{"_e":"metro:bundling:progress","_t":1786613486389,"id":"1","progress":0.30333488097880174,"total":857,"current":472}
+{"_e":"metro:bundling:progress","_t":1786613486497,"id":"1","progress":0.3359895058344428,"total":904,"current":524}
+{"_e":"metro:bundling:progress","_t":1786613486597,"id":"1","progress":0.3359895058344428,"total":2638,"current":592}
+{"_e":"metro:bundling:progress","_t":1786613486697,"id":"1","progress":0.3359895058344428,"total":2768,"current":686}
+{"_e":"metro:bundling:progress","_t":1786613486797,"id":"1","progress":0.3359895058344428,"total":2823,"current":812}
+{"_e":"metro:bundling:progress","_t":1786613486903,"id":"1","progress":0.3359895058344428,"total":2871,"current":875}
+{"_e":"metro:bundling:progress","_t":1786613487007,"id":"1","progress":0.3359895058344428,"total":2956,"current":906}
+{"_e":"metro:bundling:progress","_t":1786613487107,"id":"1","progress":0.5707621344733591,"total":2961,"current":2237}
+{"_e":"metro:bundling:progress","_t":1786613487207,"id":"1","progress":0.7598753693532437,"total":2962,"current":2582}
+{"_e":"metro:bundling:progress","_t":1786613487308,"id":"1","progress":0.8088569732377787,"total":2991,"current":2690}
+{"_e":"metro:bundling:progress","_t":1786613487408,"id":"1","progress":0.8190220043059503,"total":3021,"current":2734}
+{"_e":"metro:bundling:progress","_t":1786613487508,"id":"1","progress":0.8764782043553133,"total":3135,"current":2935}
+{"_e":"metro:bundling:progress","_t":1786613487608,"id":"1","progress":0.8781549793135599,"total":3275,"current":3069}
+{"_e":"metro:bundling:progress","_t":1786613487757,"id":"1","progress":0.8781549793135599,"total":3416,"current":3142}
+{"_e":"metro:bundling:progress","_t":1786613487857,"id":"1","progress":0.8781549793135599,"total":3538,"current":3307}
+{"_e":"metro:bundling:progress","_t":1786613487957,"id":"1","progress":0.9673862439244121,"total":3710,"current":3649}
+{"_e":"metro:bundling:done","_t":1786613488143,"id":"1","total":3710,"ms":2164.439666}
+{"_e":"metro:client_log","_t":1786613490305,"level":"warn","data":["Require cycle: ../../src/lib/brokerChannelLink.ts -> ../../src/lib/channelTradingConfig.ts -> ../../src/lib/brokerChannelLink.ts\n\nRequire cycles are allowed, but can result in uninitialized values. Consider refactoring to remove the need for a cycle."]}
+{"_e":"metro:client_log","_t":1786613501936,"level":"warn","data":["[push] Physical device required for push notifications"]}
+{"_e":"metro:client_log","_t":1786613502361,"level":"warn","data":["InteractionManager has been deprecated and will be removed in a future release. Please refactor long tasks into smaller ones, and  use 'requestIdleCallback' instead."]}
+{"_e":"metro:server_log","_t":1786656280920,"level":"error","data":["[timeout] connection terminated with Device for app='%s' on device='%s' after not responding for %s seconds.","ai.tscopier.app","iPhone 15 Pro","60"]}
+{"_e":"metro:server_log","_t":1786657326356,"level":"error","data":["[timeout] connection terminated with Device for app='%s' on device='%s' after not responding for %s seconds.","ai.tscopier.app","iPhone 15 Pro","60"]}
+{"_e":"metro:server_log","_t":1786659220353,"level":"error","data":["[timeout] connection terminated with Device for app='%s' on device='%s' after not responding for %s seconds.","ai.tscopier.app","iPhone 15 Pro","60"]}
+{"_e":"metro:server_log","_t":1786661276381,"level":"error","data":["[timeout] connection terminated with Device for app='%s' on device='%s' after not responding for %s seconds.","ai.tscopier.app","iPhone 15 Pro","60"]}
+{"_e":"metro:server_log","_t":1786662457402,"level":"error","data":["[timeout] connection terminated with Device for app='%s' on device='%s' after not responding for %s seconds.","ai.tscopier.app","iPhone 15 Pro","60"]}
+{"_e":"metro:server_log","_t":1786663482382,"level":"error","data":["[timeout] connection terminated with Device for app='%s' on device='%s' after not responding for %s seconds.","ai.tscopier.app","iPhone 15 Pro","60"]}
+{"_e":"metro:server_log","_t":1786665487407,"level":"error","data":["[timeout] connection terminated with Device for app='%s' on device='%s' after not responding for %s seconds.","ai.tscopier.app","iPhone 15 Pro","60"]}
+{"_e":"metro:server_log","_t":1786667175476,"level":"error","data":["[timeout] connection terminated with Device for app='%s' on device='%s' after not responding for %s seconds.","ai.tscopier.app","iPhone 15 Pro","60"]}
+{"_e":"metro:server_log","_t":1786669104511,"level":"error","data":["[timeout] connection terminated with Device for app='%s' on device='%s' after not responding for %s seconds.","ai.tscopier.app","iPhone 15 Pro","60"]}
+{"_e":"metro:server_log","_t":1786670894594,"level":"error","data":["[timeout] connection terminated with Device for app='%s' on device='%s' after not responding for %s seconds.","ai.tscopier.app","iPhone 15 Pro","60"]}
+{"_e":"metro:server_log","_t":1786672866602,"level":"error","data":["[timeout] connection terminated with Device for app='%s' on device='%s' after not responding for %s seconds.","ai.tscopier.app","iPhone 15 Pro","60"]}
+{"_e":"metro:server_log","_t":1786674436639,"level":"error","data":["[timeout] connection terminated with Device for app='%s' on device='%s' after not responding for %s seconds.","ai.tscopier.app","iPhone 15 Pro","60"]}
+{"_e":"metro:server_log","_t":1786676412618,"level":"error","data":["[timeout] connection terminated with Device for app='%s' on device='%s' after not responding for %s seconds.","ai.tscopier.app","iPhone 15 Pro","60"]}
+{"_e":"metro:server_log","_t":1786678047612,"level":"error","data":["[timeout] connection terminated with Device for app='%s' on device='%s' after not responding for %s seconds.","ai.tscopier.app","iPhone 15 Pro","60"]}
+{"_e":"metro:server_log","_t":1786680074595,"level":"error","data":["[timeout] connection terminated with Device for app='%s' on device='%s' after not responding for %s seconds.","ai.tscopier.app","iPhone 15 Pro","60"]}
+{"_e":"metro:server_log","_t":1786681828487,"level":"error","data":["[timeout] connection terminated with Device for app='%s' on device='%s' after not responding for %s seconds.","ai.tscopier.app","iPhone 15 Pro","60"]}
+{"_e":"metro:server_log","_t":1786683427429,"level":"error","data":["[timeout] connection terminated with Device for app='%s' on device='%s' after not responding for %s seconds.","ai.tscopier.app","iPhone 15 Pro","60"]}
+{"_e":"metro:server_log","_t":1786684420420,"level":"error","data":["[timeout] connection terminated with Device for app='%s' on device='%s' after not responding for %s seconds.","ai.tscopier.app","iPhone 15 Pro","60"]}
+{"_e":"metro:server_log","_t":1786685399450,"level":"error","data":["[timeout] connection terminated with Device for app='%s' on device='%s' after not responding for %s seconds.","ai.tscopier.app","iPhone 15 Pro","60"]}
+{"_e":"metro:server_log","_t":1786687337467,"level":"error","data":["[timeout] connection terminated with Device for app='%s' on device='%s' after not responding for %s seconds.","ai.tscopier.app","iPhone 15 Pro","60"]}
+{"_e":"metro:server_log","_t":1786689188471,"level":"error","data":["[timeout] connection terminated with Device for app='%s' on device='%s' after not responding for %s seconds.","ai.tscopier.app","iPhone 15 Pro","60"]}
+{"_e":"metro:server_log","_t":1786691328513,"level":"error","data":["[timeout] connection terminated with Device for app='%s' on device='%s' after not responding for %s seconds.","ai.tscopier.app","iPhone 15 Pro","60"]}
+{"_e":"metro:server_log","_t":1786692709536,"level":"error","data":["[timeout] connection terminated with Device for app='%s' on device='%s' after not responding for %s seconds.","ai.tscopier.app","iPhone 15 Pro","60"]}
+{"_e":"metro:server_log","_t":1786694734527,"level":"error","data":["[timeout] connection terminated with Device for app='%s' on device='%s' after not responding for %s seconds.","ai.tscopier.app","iPhone 15 Pro","60"]}
+{"_e":"metro:server_log","_t":1786696412427,"level":"error","data":["[timeout] connection terminated with Device for app='%s' on device='%s' after not responding for %s seconds.","ai.tscopier.app","iPhone 15 Pro","60"]}
+{"_e":"metro:server_log","_t":1786698451560,"level":"error","data":["[timeout] connection terminated with Device for app='%s' on device='%s' after not responding for %s seconds.","ai.tscopier.app","iPhone 15 Pro","60"]}
+{"_e":"metro:server_log","_t":1786699727964,"level":"error","data":["[timeout] connection terminated with Device for app='%s' on device='%s' after not responding for %s seconds.","ai.tscopier.app","iPhone 15 Pro","60"]}
