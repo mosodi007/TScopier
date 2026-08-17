@@ -8,7 +8,7 @@
       "developmentClient": true,
       "distribution": "internal",
       "ios": {
-        "simulator": true,
+        "simulator": false,
         "image": "sdk-57"
       },
       "env": {
@@ -16,6 +16,13 @@
       },
       "cache": {
         "disabled": true
+      }
+    },
+    "development-simulator": {
+      "extends": "development",
+      "ios": {
+        "simulator": true,
+        "image": "sdk-57"
       }
     },
     "preview": {

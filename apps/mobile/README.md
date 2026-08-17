@@ -53,9 +53,14 @@ cd apps/mobile
    | `EXPO_PUBLIC_APP_SCHEME` | `tscopier` |
 
 5. Build:
-   - iOS simulator: `eas build --profile development --platform ios`
+   - iPhone (dev client IPA): `eas build --profile development --platform ios`
+   - iOS Simulator: `eas build --profile development-simulator --platform ios`
    - Internal testing: `eas build --profile preview --platform all`
    - Store release: `eas build --profile production --platform all`
+
+   The `development` profile is a **device** ad-hoc IPA. Register the phone with `eas device:create` before the first device build, then install from the Expo page (`.ipa`, not `.tar.gz`). Do not scan a Simulator build QR on a physical iPhone.
+
+   After the IPA is installed, start Metro with `npx expo start --dev-client` and open the **TScopier** app (not Expo Go). On iOS 16+, enable **Settings → Privacy & Security → Developer Mode**.
 6. Submit:
    - iOS: `eas submit --platform ios --profile production`
    - Android: `eas submit --platform android --profile production`

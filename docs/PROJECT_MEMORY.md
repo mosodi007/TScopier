@@ -2,6 +2,20 @@
 
 ## Changelog
 
+### 2026-08-17 — Development EAS profile is a device IPA (not Simulator)
+
+- Root cause of iPhone **Unable to Install 'TScopier'**: `development` had `ios.simulator: true`. Scanning that QR tried to OTA-install a Simulator `.tar.gz` on a phone.
+- `development` is now `simulator: false` (ad-hoc IPA + dev client). Added `development-simulator` for Mac Simulator.
+- UDID `00008150-000624463E68C01C` already on EAS team `QPS3RCAU26`; next development build must include it in the ad-hoc profile.
+- Files: `apps/mobile/eas.json`, `apps/mobile/README.md`. Scratchpad: `docs/scratchpad-iphone-dev-build-install-2026-08-17.md`.
+- Device IPA: https://expo.dev/accounts/tartarix/projects/tscopier/builds/d22b4197-6923-4d56-a899-a282497256cd (artifact `.ipa`, UDID in ad-hoc profile `U92T2NLWF5`).
+
+### 2026-08-17 — Registered iPhone UDID on EAS (dev install)
+
+- Device `00008150-000624463E68C01C` (iPhone) registered on Expo account `tartarix` / Apple team `QPS3RCAU26`.
+- Follow-up: `development` profile flipped to device IPA (see entry above).
+- Scratchpad: `docs/scratchpad-iphone-dev-build-install-2026-08-17.md`.
+
 ### 2026-08-12 — Mobile: fix Tabs ErrorBoundary crash (web supabase env)
 
 - **Symptom:** `Cannot read property 'ErrorBoundary' of undefined` on `app/(app)/(tabs)/_layout.tsx` after login.
