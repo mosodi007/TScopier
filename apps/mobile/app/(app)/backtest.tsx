@@ -24,7 +24,7 @@ import { useBacktestFlow } from '@/hooks/useBacktestFlow'
 import { BacktestHistoryModal } from '@/components/backtest/BacktestHistoryModal'
 import { BacktestTradeDetailModal } from '@/components/backtest/BacktestTradeDetailModal'
 import { BacktestTradeRowCard } from '@/components/backtest/BacktestTradeRowCard'
-import { AppScreen } from '@/components/layout/AppScreen'
+import { StackScreen } from '@/components/layout/StackScreen'
 import { BodyText, Button, Card, MutedText, pnlTextClass } from '@/components/ui'
 import type { BacktestTradeRow } from '@/lib/backtestTypes'
 import { formatPipValue } from '@/lib/backtestDisplay'
@@ -94,7 +94,7 @@ export default function BacktestScreen() {
   }, [flow.trades.length])
 
   return (
-    <AppScreen pageTitle="Backtest" noPadding>
+    <StackScreen title="Backtest">
       <View className="mb-3 flex-row items-center justify-end">
         <Pressable
           onPress={() => setHistoryOpen(true)}
@@ -117,7 +117,7 @@ export default function BacktestScreen() {
 
       <ScrollView
         className="flex-1"
-        contentContainerClassName="gap-4 pb-28"
+        contentContainerClassName="gap-4 pb-8"
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
       >
@@ -465,6 +465,7 @@ export default function BacktestScreen() {
           void flow.openHistoryRun(run)
         }}
       />
-    </AppScreen>
+    </StackScreen>
   )
 }
+

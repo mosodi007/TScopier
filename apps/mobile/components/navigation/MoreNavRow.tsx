@@ -8,8 +8,11 @@ import { Card } from '@/components/ui'
 import { cn } from '@/lib/cn'
 
 async function navigateTarget(target: MobileNavTarget) {
-  if (target.kind === 'tab' || target.kind === 'stack') {
-    // navigate avoids stacking duplicate tab/stack entries (push felt laggy).
+  if (target.kind === 'stack') {
+    router.push(target.href as never)
+    return
+  }
+  if (target.kind === 'tab') {
     router.navigate(target.href as never)
     return
   }

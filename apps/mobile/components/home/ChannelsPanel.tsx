@@ -237,6 +237,7 @@ export function ChannelsPanel({
         accessibilityLabel="Add channel from Telegram"
         onPress={openPicker}
         disabled={loading}
+        aboveTabBar={false}
       />
     </View>
   )

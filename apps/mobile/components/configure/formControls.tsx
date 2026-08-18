@@ -15,7 +15,7 @@ export function ConfigSection({
   children: React.ReactNode
 }) {
   return (
-    <Card className="gap-3">
+    <Card className="gap-4">
       <View>
         <HeadingText className="text-base">{title}</HeadingText>
         {subtitle ? <MutedText className="mt-1 text-xs">{subtitle}</MutedText> : null}

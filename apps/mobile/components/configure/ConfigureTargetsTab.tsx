@@ -1,4 +1,5 @@
 import { Pressable, Switch, Text, View } from 'react-native'
+import { Trash2 } from 'lucide-react-native'
 import type { ManualSettings, ManualTpLot } from '@tscopier/shared'
 import {
   DEFAULT_COPY_LIMITS,
@@ -65,7 +66,7 @@ export function ConfigureTargetsTab({ settings, onChange }: ConfigureTargetsTabP
         {tpLots.map((row, index) => (
           <View
             key={`${row.label}-${index}`}
-            className="gap-2 border-b border-neutral-100 pb-3 dark:border-neutral-800"
+            className="gap-3 rounded-xl border border-neutral-100 p-3 dark:border-neutral-800"
           >
             <View className="flex-row items-center justify-between">
               <Text className="text-sm font-medium text-neutral-900 dark:text-neutral-50">
@@ -254,15 +255,27 @@ function LimitRuleRow({
   onRemove: () => void
 }) {
   return (
-    <View className="gap-2 rounded-xl border border-neutral-100 p-3 dark:border-neutral-800">
-      <View className="flex-row items-center justify-between">
-        <SwitchRow
-          label="Enabled"
+    <View className="gap-3 rounded-xl border border-neutral-100 p-3 dark:border-neutral-800">
+      <View className="flex-row items-center justify-between gap-3">
+        <View className="min-w-0 flex-1">
+          <Text className="text-sm font-medium text-neutral-900 dark:text-neutral-50">
+            Enabled
+          </Text>
+        </View>
+        <Switch
           value={row.enabled}
           onValueChange={next => onChange({ enabled: next })}
+          trackColor={{ false: '#d4d4d4', true: tscTheme.primary }}
+          thumbColor="#ffffff"
         />
-        <Pressable onPress={onRemove}>
-          <Text className="text-xs font-medium text-red-600">Remove</Text>
+        <Pressable
+          onPress={onRemove}
+          hitSlop={8}
+          accessibilityRole="button"
+          accessibilityLabel="Remove rule"
+          className="rounded-lg p-2"
+        >
+          <Trash2 size={16} color="#dc2626" />
         </Pressable>
       </View>
       <SegmentedControl

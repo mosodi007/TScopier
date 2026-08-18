@@ -272,7 +272,7 @@ export default function TelegramLinkScreen() {
                 label="Manage channels"
                 onPress={() => {
                   router.back()
-                  router.push('/(app)/(tabs)/channels')
+                  router.push('/(app)/channels')
                 }}
               />
               <Button label="Done" variant="secondary" onPress={() => router.back()} />

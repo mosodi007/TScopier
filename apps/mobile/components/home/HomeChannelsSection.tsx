@@ -6,7 +6,7 @@ interface HomeChannelsSectionProps {
   enabled?: boolean
 }
 
-/** Channels body without page chrome — used when embedded; tab screen uses AppScreen. */
+/** Channels body without page chrome — used when embedded; stack screen uses StackScreen. */
 export function HomeChannelsSection({ enabled = true }: HomeChannelsSectionProps) {
   return (
     <View className="flex-1">

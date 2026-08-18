@@ -1,7 +1,8 @@
 import { Tabs } from 'expo-router'
 import { FloatingTabBar } from '@/components/navigation/FloatingTabBar'
-import { HIDDEN_TAB_SCREENS, TAB_NAV_META, TAB_SCREEN_ORDER } from '@/lib/navigation'
+import { TAB_NAV_META, TAB_SCREEN_ORDER } from '@/lib/navigation'
 
+/** Channels and Backtest live on the app stack, not as hidden tabs. */
 export default function TabLayout() {
   return (
     <Tabs
@@ -35,16 +36,6 @@ export default function TabLayout() {
           />
         )
       })}
-      {HIDDEN_TAB_SCREENS.map(name => (
-        <Tabs.Screen
-          key={name}
-          name={name}
-          options={{
-            href: null,
-            title: TAB_NAV_META[name].label,
-          }}
-        />
-      ))}
     </Tabs>
   )
 }

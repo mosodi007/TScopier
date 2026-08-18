@@ -40,6 +40,7 @@ import { ConfigureSignalExamplesTab } from '@/components/configure/ConfigureSign
 import { ConfigureTargetsTab } from '@/components/configure/ConfigureTargetsTab'
 import { TextField } from '@/components/configure/formControls'
 import { AddTelegramChannelModal } from '@/components/channels/AddTelegramChannelModal'
+import { useConfigureSectionPager } from '@/components/configure/useConfigureSectionPager'
 import { supabase } from '@/lib/supabase'
 import { tscTheme } from '@/lib/tscTheme'
 import { formatMoney } from '@/lib/formatMoney'
@@ -98,6 +99,8 @@ const TABS: Array<{ id: ConfigTab; label: string; icon: LucideIcon }> = [
   { id: 'filters', label: 'Filters', icon: Filter },
 ]
 
+const TAB_IDS = TABS.map(tab => tab.id)
+
 function symbolsToInput(value: string | null | undefined): string {
   return value?.trim() ?? ''
 }
@@ -129,9 +132,9 @@ export default function BrokerConfigScreen() {
   const [channelLinkEditMode, setChannelLinkEditMode] = useState(false)
   const [addChannelOpen, setAddChannelOpen] = useState(false)
   const [selectedChannelId, setSelectedChannelId] = useState<string | null>(null)
-  const [activeTab, setActiveTab] = useState<ConfigTab>('signal_examples')
   const [drafts, setDrafts] = useState<Record<string, ManualSettings>>({})
   const [filterDrafts, setFilterDrafts] = useState<Record<string, ChannelFilters>>({})
+  const pager = useConfigureSectionPager(TAB_IDS)
 
   const plan = resolvePlan(subscription?.plan, isAdmin)
   const status = hasActiveSubscription || isAdmin ? subscription?.status ?? 'active' : null
@@ -256,6 +259,11 @@ export default function BrokerConfigScreen() {
     setFilterDrafts(prev => ({ ...prev, [selectedChannelId]: next }))
   }
 
+  const selectChannel = (channelId: string) => {
+    setSelectedChannelId(channelId)
+    pager.resetTo('signal_examples')
+  }
+
   const save = async () => {
     if (!user?.id || !broker) return
     const linkedIds = draftChannelIds
@@ -270,13 +278,13 @@ export default function BrokerConfigScreen() {
       if (!(lot > 0) && draft.risk_mode !== 'dynamic_balance_percent') {
         setError('Each channel needs a fixed lot greater than 0 (or % of balance risk mode).')
         setSelectedChannelId(channelId)
-        setActiveTab('risk')
+        pager.scrollToSection('risk')
         return
       }
       if (draft.trade_style === 'multi' && !allowMultiTrade) {
         setError('Multi Trades requires an Advanced plan.')
         setSelectedChannelId(channelId)
-        setActiveTab('risk')
+        pager.scrollToSection('risk')
         return
       }
     }
@@ -460,7 +468,7 @@ export default function BrokerConfigScreen() {
                   <Pressable
                     onPress={() => {
                       if (!linked) toggleDraftChannel(channel.id)
-                      else setSelectedChannelId(channel.id)
+                      else selectChannel(channel.id)
                     }}
                     className={cn(
                       'min-h-[44px] min-w-[160px] max-w-[220px] flex-row items-center gap-2 rounded-lg border px-2.5 py-2',
@@ -499,7 +507,7 @@ export default function BrokerConfigScreen() {
               return (
                 <Pressable
                   key={channel.id}
-                  onPress={() => setSelectedChannelId(channel.id)}
+                  onPress={() => selectChannel(channel.id)}
                   className={cn(
                     'min-h-[44px] min-w-[160px] max-w-[220px] flex-row items-center gap-2 rounded-lg border px-2.5 py-2',
                     selected
@@ -535,18 +543,20 @@ export default function BrokerConfigScreen() {
       {selectedChannelId ? (
         <View className="border-b border-neutral-100 bg-white dark:border-neutral-800 dark:bg-neutral-900">
           <ScrollView
+            ref={pager.tabScrollRef}
             horizontal
             showsHorizontalScrollIndicator={false}
             contentContainerClassName="flex-row items-stretch px-2"
           >
             {TABS.map(tab => {
-              const active = tab.id === activeTab
+              const active = tab.id === pager.activeId
               const Icon = tab.icon
               const iconColor = active ? tscTheme.primary : '#a3a3a3'
               return (
                 <Pressable
                   key={tab.id}
-                  onPress={() => setActiveTab(tab.id)}
+                  onPress={() => pager.scrollToSection(tab.id)}
+                  onLayout={e => pager.onTabLayout(tab.id, e.nativeEvent.layout.x)}
                   className={cn(
                     'h-12 flex-row items-center gap-1.5 border-b-2 px-3',
                     active ? 'border-teal-600' : 'border-transparent',
@@ -571,8 +581,12 @@ export default function BrokerConfigScreen() {
       ) : null}
 
       <ScrollView
-        contentContainerClassName="gap-4 px-4 py-4 pb-32"
+        ref={pager.scrollRef}
+        className="flex-1"
+        contentContainerClassName="px-4 py-4 pb-32"
         keyboardShouldPersistTaps="handled"
+        onScroll={pager.onBodyScroll}
+        scrollEventThrottle={16}
       >
         {!selectedChannelId ? (
           <Card>
@@ -580,28 +594,23 @@ export default function BrokerConfigScreen() {
           </Card>
         ) : (
           <>
-            {activeTab === 'signal_examples' && user?.id ? (
-              <ConfigureSignalExamplesTab channelId={selectedChannelId} userId={user.id} />
-            ) : null}
-            {activeTab === 'risk' ? (
-              <ConfigureRiskTab
-                settings={settings}
-                onChange={patchSettings}
-                allowMultiTrade={allowMultiTrade}
-                accountBalance={resolveBrokerTotalBalance(broker)}
-                currency={broker.last_currency}
-              />
-            ) : null}
-            {activeTab === 'stops' ? (
-              <ConfigureTargetsTab settings={settings} onChange={patchSettings} />
-            ) : null}
-            {activeTab === 'management' ? (
-              <ConfigureManagementTab settings={settings} onChange={patchSettings} />
-            ) : null}
-            {activeTab === 'filters' ? (
-              <ConfigureFiltersTab settings={settings} onChange={patchSettings} />
-            ) : null}
-            {activeTab === 'symbols' ? (
+            <View
+              collapsable={false}
+              className="mb-8"
+              onLayout={e => pager.onSectionLayout('signal_examples', e.nativeEvent.layout.y)}
+            >
+              <HeadingText className="mb-3 text-base">Signal Examples</HeadingText>
+              {user?.id ? (
+                <ConfigureSignalExamplesTab channelId={selectedChannelId} userId={user.id} />
+              ) : null}
+            </View>
+
+            <View
+              collapsable={false}
+              className="mb-8"
+              onLayout={e => pager.onSectionLayout('symbols', e.nativeEvent.layout.y)}
+            >
+              <HeadingText className="mb-3 text-base">Symbols</HeadingText>
               <Card className="gap-3">
                 <HeadingText className="text-base">Symbol filters</HeadingText>
                 <MutedText className="text-xs">
@@ -625,14 +634,62 @@ export default function BrokerConfigScreen() {
                   multiline
                 />
               </Card>
-            ) : null}
-            {activeTab === 'instructions' ? (
+            </View>
+
+            <View
+              collapsable={false}
+              className="mb-8"
+              onLayout={e => pager.onSectionLayout('instructions', e.nativeEvent.layout.y)}
+            >
+              <HeadingText className="mb-3 text-base">Instructions</HeadingText>
               <ConfigureInstructionsTab
                 filters={channelFilters}
                 onChange={setChannelFilters}
                 keywordFiltersEnabled={keywordFiltersEnabled}
               />
-            ) : null}
+            </View>
+
+            <View
+              collapsable={false}
+              className="mb-8"
+              onLayout={e => pager.onSectionLayout('risk', e.nativeEvent.layout.y)}
+            >
+              <HeadingText className="mb-3 text-base">Risk</HeadingText>
+              <ConfigureRiskTab
+                settings={settings}
+                onChange={patchSettings}
+                allowMultiTrade={allowMultiTrade}
+                accountBalance={resolveBrokerTotalBalance(broker)}
+                currency={broker.last_currency}
+              />
+            </View>
+
+            <View
+              collapsable={false}
+              className="mb-8"
+              onLayout={e => pager.onSectionLayout('stops', e.nativeEvent.layout.y)}
+            >
+              <HeadingText className="mb-3 text-base">Targets</HeadingText>
+              <ConfigureTargetsTab settings={settings} onChange={patchSettings} />
+            </View>
+
+            <View
+              collapsable={false}
+              className="mb-8"
+              onLayout={e => pager.onSectionLayout('management', e.nativeEvent.layout.y)}
+            >
+              <HeadingText className="mb-3 text-base">Management</HeadingText>
+              <ConfigureManagementTab settings={settings} onChange={patchSettings} />
+            </View>
+
+            <View
+              collapsable={false}
+              className="mb-8"
+              onLayout={e => pager.onSectionLayout('filters', e.nativeEvent.layout.y)}
+            >
+              <HeadingText className="mb-3 text-base">Filters</HeadingText>
+              <ConfigureFiltersTab settings={settings} onChange={patchSettings} />
+            </View>
           </>
         )}
 

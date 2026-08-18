@@ -39,6 +39,8 @@ export default function AppLayout() {
       <Stack.Screen name="settings" options={{ title: 'Settings' }} />
       <Stack.Screen name="activities" options={{ title: 'Copier engine' }} />
       <Stack.Screen name="copier-logs" options={{ title: 'Copier logs' }} />
+      <Stack.Screen name="channels" options={{ title: 'Channels' }} />
+      <Stack.Screen name="backtest" options={{ title: 'Backtest' }} />
       <Stack.Screen name="broker-connect" options={{ presentation: 'modal', title: 'Connect broker' }} />
       <Stack.Screen name="telegram-link" options={{ presentation: 'modal', title: 'Link Telegram' }} />
       <Stack.Screen name="billing" options={{ presentation: 'modal', title: 'Billing' }} />

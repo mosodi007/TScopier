@@ -1,8 +1,8 @@
 import './env'
 import { createClient, type SupabaseClient } from '@supabase/supabase-js'
 import { RealtimeClient } from '@supabase/realtime-js'
-import * as SecureStore from 'expo-secure-store'
 import { getSupabaseAnonKey, getSupabaseUrl } from '@tscopier/shared'
+import { authStorage } from './authStorage'
 
 function readEnv(key: string): string {
   const value = process.env[key]
@@ -47,22 +47,17 @@ function applyOptionalRealtimeEndpoint(client: SupabaseClient, anonKey: string):
   })
 }
 
-const SecureStoreAdapter = {
-  getItem: (key: string) => SecureStore.getItemAsync(key),
-  setItem: (key: string, value: string) => SecureStore.setItemAsync(key, value),
-  removeItem: (key: string) => SecureStore.deleteItemAsync(key),
-}
-
 /**
  * Always export a client so module importers don't crash.
  * When misconfigured, RootLayout shows a config screen and never mounts auth.
+ * Native session storage: SecureStore. Web/SSR: localStorage (see authStorage.web.ts).
  */
 export const supabase: SupabaseClient = createClient(
   supabaseUrl || 'https://invalid.local',
   supabaseAnonKey || 'invalid',
   {
     auth: {
-      storage: SecureStoreAdapter,
+      storage: authStorage,
       autoRefreshToken: isSupabaseConfigured,
       persistSession: isSupabaseConfigured,
       detectSessionInUrl: false,

@@ -1,16 +1,12 @@
 import { useCallback, useMemo, useRef, useState } from 'react'
 import {
-  Dimensions,
-  NativeSyntheticEvent,
   Pressable,
   ScrollView,
   StyleSheet,
   Text,
+  useWindowDimensions,
   View,
 } from 'react-native'
-import PagerView, {
-  type PagerViewOnPageSelectedEventData,
-} from 'react-native-pager-view'
 import Animated, {
   Extrapolation,
   interpolate,
@@ -23,6 +19,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { LanguageSwitcher } from '@/components/LanguageSwitcher'
 import { ThemeToggle } from '@/components/ThemeToggle'
 import { TscopierLogo } from '@/components/branding/TscopierLogo'
+import { WelcomePager, type WelcomePagerHandle } from '@/components/welcome/WelcomePager'
 import { WelcomeCopierVisual } from '@/components/welcome/visuals/WelcomeCopierVisual'
 import { WelcomeFiltersVisual } from '@/components/welcome/visuals/WelcomeFiltersVisual'
 import { WelcomeIntroVisual } from '@/components/welcome/visuals/WelcomeIntroVisual'
@@ -36,8 +33,6 @@ import {
   type WelcomeFeatureVisualId,
 } from '@/lib/welcomeSlides'
 import { tscTheme } from '@/lib/tscTheme'
-
-const { width: SCREEN_W } = Dimensions.get('window')
 
 function FeatureVisual({ id }: { id: WelcomeFeatureVisualId }) {
   switch (id) {
@@ -76,9 +71,10 @@ interface WelcomeSliderProps {
 
 export function WelcomeSlider({ onFinished, onSkip }: WelcomeSliderProps) {
   const insets = useSafeAreaInsets()
+  const { width: screenW } = useWindowDimensions()
   const { isDark } = useTheme()
   const { locale, landing, dir } = useLocale()
-  const pagerRef = useRef<PagerView>(null)
+  const pagerRef = useRef<WelcomePagerHandle>(null)
   const [page, setPage] = useState(0)
   const progress = useSharedValue(0)
 
@@ -90,8 +86,7 @@ export function WelcomeSlider({ onFinished, onSkip }: WelcomeSliderProps) {
   const isLast = page === slides.length - 1
 
   const onPageSelected = useCallback(
-    (e: NativeSyntheticEvent<PagerViewOnPageSelectedEventData>) => {
-      const next = e.nativeEvent.position
+    (next: number) => {
       setPage(next)
       progress.value = withSpring(next, { damping: 18, stiffness: 180 })
     },
@@ -129,14 +124,14 @@ export function WelcomeSlider({ onFinished, onSkip }: WelcomeSliderProps) {
         </View>
       </View>
 
-      <PagerView
+      <WelcomePager
         ref={pagerRef}
         style={styles.pager}
         initialPage={0}
         onPageSelected={onPageSelected}
       >
         {slides.map(slide => (
-          <View key={slide.id} style={styles.page} collapsable={false}>
+          <View key={slide.id} style={[styles.page, { width: screenW }]} collapsable={false}>
             {slide.kind === 'intro' ? (
               <WelcomeIntroVisual
                 greeting={slide.greeting}
@@ -150,7 +145,7 @@ export function WelcomeSlider({ onFinished, onSkip }: WelcomeSliderProps) {
                 bounces={false}
               >
                 <View style={styles.panel}>
-                  <View style={styles.visualFrame}>
+                  <View style={{ height: Math.min(screenW * 0.72, 320) }}>
                     <FeatureVisual id={slide.id} />
                   </View>
 
@@ -182,7 +177,7 @@ export function WelcomeSlider({ onFinished, onSkip }: WelcomeSliderProps) {
             )}
           </View>
         ))}
-      </PagerView>
+      </WelcomePager>
 
       <View style={[styles.footer, { paddingBottom: Math.max(insets.bottom, 16) + 8 }]}>
         <View style={styles.footerRow}>
@@ -240,7 +235,6 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   page: {
-    width: SCREEN_W,
     flex: 1,
   },
   pageScroll: {
@@ -251,9 +245,6 @@ const styles = StyleSheet.create({
   },
   panel: {
     overflow: 'hidden',
-  },
-  visualFrame: {
-    height: Math.min(SCREEN_W * 0.72, 320),
   },
   copy: {
     paddingHorizontal: 12,

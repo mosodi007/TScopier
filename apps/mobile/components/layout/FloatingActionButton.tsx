@@ -12,16 +12,20 @@ interface FloatingActionButtonProps {
   onPress: () => void
   disabled?: boolean
   accessibilityLabel: string
+  /** Lift above the floating tab bar. Off on stack screens (no tab bar). */
+  aboveTabBar?: boolean
 }
 
 export function FloatingActionButton({
   onPress,
   disabled = false,
   accessibilityLabel,
+  aboveTabBar = true,
 }: FloatingActionButtonProps) {
   const insets = useSafeAreaInsets()
   const bottomPad = Math.max(insets.bottom, 8)
-  const bottom = bottomPad + TAB_BAR_TOP_PAD + TAB_BAR_PILL_HEIGHT + FAB_GAP_ABOVE_NAV
+  const tabClearance = aboveTabBar ? TAB_BAR_TOP_PAD + TAB_BAR_PILL_HEIGHT + FAB_GAP_ABOVE_NAV : 16
+  const bottom = bottomPad + tabClearance
 
   return (
     <View

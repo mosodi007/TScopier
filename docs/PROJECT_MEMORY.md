@@ -2,6 +2,36 @@
 
 ## Changelog
 
+### 2026-08-18 — Mobile configure Targets spacing + trash icon remove action
+
+- **Wanted:** Broker configure cards on mobile felt cramped, especially in `Targets`, and limit-row remove actions used plain text.
+- **Fix:** Increased `ConfigSection` spacing, gave TP distribution rows their own bordered cards, and replaced `Remove` text with a trash icon beside the enable toggle for profit target / max risk rules.
+- Files: `apps/mobile/components/configure/formControls.tsx`, `apps/mobile/components/configure/ConfigureTargetsTab.tsx`.
+
+### 2026-08-18 — Mobile broker config uses one scroll pager (web parity)
+
+- **Wanted:** Match web configure modal: one stacked settings document, tabs scroll the page (not swap exclusive panels).
+- **Fix:** All seven sections render in one `ScrollView`. Tab taps `scrollTo` that section; body scroll updates the active tab; the tab strip scrolls the active chip into view.
+- Files: `apps/mobile/components/configure/useConfigureSectionPager.ts`, `apps/mobile/app/(app)/broker-config/[id].tsx`.
+
+### 2026-08-18 — More menu pages are stack screens (back + no tab bar)
+
+- **Bug:** Channels and Backtest were hidden tabs. Opening them from More still showed the tab bar and highlighted **Home** (hidden-tab index mapped to 0).
+- **Fix:** Both are app stack screens with `StackScreen` back. More uses `router.push`. Tab bar is not mounted on those routes.
+- Files: `channels.tsx`, `backtest.tsx` moved to `app/(app)/`; `navigation.ts`, tabs `_layout`, app `_layout`, `MoreNavRow.tsx`.
+
+### 2026-08-18 — Expo web SSR: do not use SecureStore for Supabase session
+
+- **Bug:** After the pager-view fix, web crashed: `ExpoSecureStore.default.getValueWithKeyAsync is not a function`. Expo Router SSR (Node) loads `lib/supabase.ts` and auth recovery called SecureStore.
+- **Fix:** `authStorage.ts` keeps SecureStore on native. `authStorage.web.ts` uses localStorage in the browser and memory during Node SSR.
+- Files: `apps/mobile/lib/authStorage.ts`, `authStorage.web.ts`, `supabase.ts`.
+
+### 2026-08-18 — Expo web: welcome slider no longer imports native pager-view
+
+- **Bug:** `npx expo start` web failed with `codegenNativeCommands` from `react-native-pager-view` via `WelcomeSlider`.
+- **Fix:** Native pager stays in `WelcomePager.tsx`. Web uses `WelcomePager.web.tsx` (horizontal paging ScrollView). Metro never loads the native module on web.
+- Files: `apps/mobile/components/welcome/WelcomePager.tsx`, `WelcomePager.web.tsx`, `WelcomeSlider.tsx`.
+
 ### 2026-08-17 — Development EAS profile is a device IPA (not Simulator)
 
 - Root cause of iPhone **Unable to Install 'TScopier'**: `development` had `ios.simulator: true`. Scanning that QR tried to OTA-install a Simulator `.tar.gz` on a phone.

@@ -26,9 +26,7 @@ export type MobileNavTarget =
         | '/(app)/(tabs)/dashboard'
         | '/(app)/(tabs)/signals'
         | '/(app)/(tabs)/brokers'
-        | '/(app)/(tabs)/channels'
         | '/(app)/(tabs)/trades'
-        | '/(app)/(tabs)/backtest'
         | '/(app)/(tabs)/more'
     }
   | { kind: 'stack'; href: string }
@@ -59,13 +57,13 @@ export const MOBILE_MORE_SECTIONS: MobileNavSection[] = [
         id: 'channels',
         label: 'Channels',
         icon: Radio,
-        target: { kind: 'tab', href: '/(app)/(tabs)/channels' },
+        target: { kind: 'stack', href: '/(app)/channels' },
       },
       {
         id: 'backtest',
         label: 'Backtest',
         icon: FlaskConical,
-        target: { kind: 'tab', href: '/(app)/(tabs)/backtest' },
+        target: { kind: 'stack', href: '/(app)/backtest' },
       },
       {
         id: 'activities',
@@ -164,15 +162,13 @@ export const TAB_SCREEN_ORDER = [
   'more',
 ] as const
 
-/** Hidden from the tab bar but still registered as tab routes (opened from More). */
-export const HIDDEN_TAB_SCREENS = ['channels', 'backtest'] as const
+/** Empty: Channels/Backtest are stack screens. Kept so a stale TabLayout cannot crash on Fast Refresh. */
+export const HIDDEN_TAB_SCREENS: readonly string[] = []
 
 export const TAB_NAV_META = {
   dashboard: { label: 'Home', icon: Home },
   signals: { label: 'Signals', icon: SlidersHorizontal },
   brokers: { label: 'Brokers', icon: Landmark },
-  channels: { label: 'Channels', icon: Radio },
   more: { label: 'More', icon: Menu },
   trades: { label: 'Trades', icon: ChartNoAxesCombined },
-  backtest: { label: 'Backtest', icon: FlaskConical },
 } as const

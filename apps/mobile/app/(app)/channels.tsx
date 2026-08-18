@@ -1,10 +1,10 @@
 import { ChannelsPanel } from '@/components/home/ChannelsPanel'
-import { AppScreen } from '@/components/layout/AppScreen'
+import { StackScreen } from '@/components/layout/StackScreen'
 
 export default function ChannelsScreen() {
   return (
-    <AppScreen pageTitle="Channels">
+    <StackScreen title="Channels">
       <ChannelsPanel />
-    </AppScreen>
+    </StackScreen>
   )
 }
