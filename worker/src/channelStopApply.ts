@@ -4,7 +4,11 @@
 
 import type { SupabaseClient } from '@supabase/supabase-js'
 import {
-  getFxsocketClient,
+  tradeFailureReasonFromBrokerMessage,
+  tradeFailureReasonFromCode,
+  type TradeFailureReason,
+} from './brokerTradeError'
+import {
   hasFxsocketConfigured,
   mtPlatformFrom,
   type FxsocketBrokerClient,
@@ -15,8 +19,8 @@ import {
   type EntryQualityLeg,
 } from './manualPlanning/tpBucketDistribution'
 import type { ManualTpLot } from './manualPlanning/types'
-import { isBenignOrderModifyError, stopsAlreadyMatchDb } from './orderModifyBenign'
-import { modifyLegSlTpWithFallback } from './orderModifySafe'
+import { isBenignOrderModifyError, isPositionGoneError, stopsAlreadyMatchDb } from './orderModifyBenign'
+import { isInvalidStopsError, modifyLegSlTpWithFallback } from './orderModifySafe'
 import {
   upsertBasketReconcileJob,
   type BasketOpenLeg,
@@ -33,6 +37,7 @@ import { incMetric } from './workerMetrics'
 import { mgmtBasketConcurrency, mgmtLegConcurrency, parallelMap } from './parallelPool'
 import { deepestFinalTp, hasClosedBasketLegs } from './rangeBasketTpSync'
 import { hasTpTouchedLock } from './rangePendingFireGuard'
+import { classifyBrokerFailureReason } from './observability/businessEvents'
 
 export type ChannelStopLeg = {
   id: string
@@ -82,6 +87,297 @@ export type ChannelStopApplyResult = {
 }
 
 const SL_VERIFY_TOLERANCE = 1e-6
+const MANAGEMENT_MODIFY_OPERATION = 'management_modify'
+const MANAGEMENT_MODIFY_PARTIAL_REASON_CODE = 'MANAGEMENT_MODIFY_PARTIAL'
+const UNKNOWN_MODIFY_REASON_CODE = 'UNKNOWN'
+const MAX_SUMMARY_LEG_FAILURES = 10
+const MAX_UNDERLYING_REASON_CODES = 5
+
+type MgmtModifyFailurePhase =
+  | 'broker_session'
+  | 'broker_position_lookup'
+  | 'order_modify'
+  | 'broker_verify'
+
+type MgmtModifyFailureSource = 'structured' | 'broker_classification' | 'local' | 'unknown'
+
+export type MgmtModifyFailureDiagnostic = {
+  operation: typeof MANAGEMENT_MODIFY_OPERATION
+  reason_code: string
+  failure_reason: string
+  failure_phase: MgmtModifyFailurePhase
+  trade_failure: TradeFailureReason
+  retryable: boolean
+  source: MgmtModifyFailureSource
+  skip_reason?: string
+}
+
+function fallbackMgmtModifyTradeFailure(reasonCode: string, failureReason = reasonCode): TradeFailureReason {
+  switch (reasonCode) {
+    case 'INVALID_STOPS':
+      return {
+        reasonCode,
+        category: 'broker',
+        title: 'Management modify was rejected by broker stop rules',
+        explanation: 'The broker rejected the SL/TP modification, usually because the requested stop or take-profit was inside stop or freeze limits.',
+        recommendedAction: 'Check broker stop/freeze levels, symbol price, and whether price moved while the management update was being applied.',
+        retryable: true,
+        userActionRequired: false,
+      }
+    case 'POSITION_GONE':
+      return {
+        reasonCode,
+        category: 'broker',
+        title: 'Position was no longer open',
+        explanation: 'The broker reported that the ticket was gone while the management modification was being applied.',
+        recommendedAction: 'Check whether TP, SL, or a manual close removed the position before the management update completed.',
+        retryable: false,
+        userActionRequired: false,
+      }
+    case 'UNKNOWN':
+      return {
+        reasonCode,
+        category: 'broker',
+        title: 'Management modify was not confirmed',
+        explanation: 'The copier could not safely classify why the broker did not confirm the management modification.',
+        recommendedAction: 'Review the broker account state and per-leg execution logs before retrying or escalating.',
+        retryable: false,
+        userActionRequired: true,
+      }
+    default:
+      return tradeFailureReasonFromCode(reasonCode) ?? {
+        reasonCode,
+        category: 'broker',
+        title: 'Management modify was not confirmed',
+        explanation: `The management modification did not complete with the safe reason ${failureReason}.`,
+        recommendedAction: 'Review the broker account state and per-leg execution logs before retrying or escalating.',
+        retryable: false,
+        userActionRequired: true,
+      }
+  }
+}
+
+function classifyBrokerMessageForMgmtModify(message: string): {
+  reasonCode: string
+  tradeFailure: TradeFailureReason
+  source: MgmtModifyFailureSource
+} {
+  if (isPositionGoneError(message)) {
+    const reasonCode = 'POSITION_GONE'
+    return { reasonCode, tradeFailure: fallbackMgmtModifyTradeFailure(reasonCode), source: 'structured' }
+  }
+  if (isInvalidStopsError(message)) {
+    const reasonCode = 'INVALID_STOPS'
+    return { reasonCode, tradeFailure: fallbackMgmtModifyTradeFailure(reasonCode), source: 'structured' }
+  }
+  const tradeFailure = tradeFailureReasonFromBrokerMessage(message)
+  if (tradeFailure?.reasonCode) {
+    return { reasonCode: tradeFailure.reasonCode, tradeFailure, source: 'broker_classification' }
+  }
+
+  const genericCode = classifyBrokerFailureReason(message)
+  if (genericCode !== 'BROKER_ORDER_REJECTED') {
+    return {
+      reasonCode: genericCode,
+      tradeFailure: fallbackMgmtModifyTradeFailure(genericCode),
+      source: 'broker_classification',
+    }
+  }
+  if (/\breject(?:ed|ion)?\b/i.test(message)) {
+    return {
+      reasonCode: genericCode,
+      tradeFailure: fallbackMgmtModifyTradeFailure(genericCode),
+      source: 'broker_classification',
+    }
+  }
+
+  return {
+    reasonCode: UNKNOWN_MODIFY_REASON_CODE,
+    tradeFailure: fallbackMgmtModifyTradeFailure(UNKNOWN_MODIFY_REASON_CODE),
+    source: 'unknown',
+  }
+}
+
+export function buildMgmtModifyFailureDiagnostic(input: {
+  message?: string | null
+  skipReason?: string | null
+}): MgmtModifyFailureDiagnostic {
+  const skipReason = String(input.skipReason ?? '').trim()
+  const message = String(input.message ?? '').trim()
+  let reasonCode: string
+  let failureReason: string
+  let failurePhase: MgmtModifyFailurePhase
+  let tradeFailure: TradeFailureReason
+  let source: MgmtModifyFailureSource
+
+  switch (skipReason) {
+    case 'no_session':
+      reasonCode = 'BROKER_ACCOUNT_UNAVAILABLE'
+      failureReason = 'NO_BROKER_SESSION'
+      failurePhase = 'broker_session'
+      tradeFailure = tradeFailureReasonFromCode(reasonCode) ?? fallbackMgmtModifyTradeFailure(reasonCode, failureReason)
+      source = 'structured'
+      break
+    case 'skipped_not_on_broker':
+      reasonCode = 'POSITION_GONE'
+      failureReason = 'POSITION_GONE'
+      failurePhase = 'broker_position_lookup'
+      tradeFailure = fallbackMgmtModifyTradeFailure(reasonCode)
+      source = 'structured'
+      break
+    case 'sl_not_applied':
+      reasonCode = 'BROKER_ORDER_REJECTED'
+      failureReason = 'REQUESTED_SL_NOT_APPLIED'
+      failurePhase = 'order_modify'
+      tradeFailure = fallbackMgmtModifyTradeFailure(reasonCode, failureReason)
+      source = 'structured'
+      break
+    case 'broker_verify_failed':
+      reasonCode = 'BROKER_ORDER_REJECTED'
+      failureReason = 'BROKER_VERIFY_FAILED'
+      failurePhase = 'broker_verify'
+      tradeFailure = fallbackMgmtModifyTradeFailure(reasonCode, failureReason)
+      source = 'structured'
+      break
+    case 'fxsocket_only':
+      reasonCode = 'BROKER_ACCOUNT_UNAVAILABLE'
+      failureReason = 'BROKER_NOT_FXSOCKET_LINKED'
+      failurePhase = 'broker_session'
+      tradeFailure = tradeFailureReasonFromCode(reasonCode) ?? fallbackMgmtModifyTradeFailure(reasonCode, failureReason)
+      source = 'structured'
+      break
+    default: {
+      const classified = classifyBrokerMessageForMgmtModify(message)
+      reasonCode = classified.reasonCode
+      failureReason = reasonCode
+      failurePhase = reasonCode === 'POSITION_GONE' ? 'broker_position_lookup' : 'order_modify'
+      tradeFailure = classified.tradeFailure
+      source = classified.source
+    }
+  }
+
+  return {
+    operation: MANAGEMENT_MODIFY_OPERATION,
+    reason_code: reasonCode,
+    failure_reason: failureReason,
+    failure_phase: failurePhase,
+    trade_failure: tradeFailure,
+    retryable: tradeFailure.retryable,
+    source,
+    ...(skipReason ? { skip_reason: skipReason } : {}),
+  }
+}
+
+function mgmtModifyFailurePayload(diagnostic: MgmtModifyFailureDiagnostic): Record<string, unknown> {
+  return {
+    management_operation: diagnostic.operation,
+    reason_code: diagnostic.reason_code,
+    failure_reason: diagnostic.failure_reason,
+    failure_phase: diagnostic.failure_phase,
+    trade_failure: diagnostic.trade_failure,
+    retryable: diagnostic.retryable,
+    diagnostic_source: diagnostic.source,
+    ...(diagnostic.skip_reason ? { skip_reason: diagnostic.skip_reason } : {}),
+  }
+}
+
+function boundedDistinctReasonCodes(values: string[]): {
+  codes: string[]
+  counts: Record<string, number>
+  truncated: boolean
+} {
+  const counts: Record<string, number> = {}
+  const codes: string[] = []
+  for (const raw of values) {
+    const code = String(raw ?? '').trim().toUpperCase()
+    if (!code) continue
+    counts[code] = (counts[code] ?? 0) + 1
+    if (!codes.includes(code) && codes.length < MAX_UNDERLYING_REASON_CODES) codes.push(code)
+  }
+  return {
+    codes,
+    counts: Object.fromEntries(codes.map(code => [code, counts[code] ?? 0])),
+    truncated: Object.keys(counts).length > codes.length,
+  }
+}
+
+function diagnosticPriority(diagnostic: MgmtModifyFailureDiagnostic): number {
+  switch (diagnostic.source) {
+    case 'structured': return 0
+    case 'broker_classification': return 1
+    case 'local': return 2
+    default: return 3
+  }
+}
+
+function primaryMgmtModifyDiagnostic(
+  diagnostics: MgmtModifyFailureDiagnostic[],
+): MgmtModifyFailureDiagnostic | null {
+  return [...diagnostics].sort((a, b) => {
+    const byPriority = diagnosticPriority(a) - diagnosticPriority(b)
+    if (byPriority !== 0) return byPriority
+    return a.reason_code.localeCompare(b.reason_code)
+  })[0] ?? null
+}
+
+function safeLegFailureDiagnostic(error: {
+  tradeId: string
+  ticket: number
+  message: string
+  skipReason?: string
+}): Record<string, unknown> {
+  const diagnostic = buildMgmtModifyFailureDiagnostic({
+    message: error.message,
+    skipReason: error.skipReason,
+  })
+  return {
+    operation: MANAGEMENT_MODIFY_OPERATION,
+    trade_id: error.tradeId,
+    ticket: error.ticket,
+    reason_code: diagnostic.reason_code,
+    failure_reason: diagnostic.failure_reason,
+    failure_phase: diagnostic.failure_phase,
+    retryable: diagnostic.retryable,
+    diagnostic_source: diagnostic.source,
+    ...(diagnostic.skip_reason ? { skip_reason: diagnostic.skip_reason } : {}),
+  }
+}
+
+function mgmtModifySummaryFailurePayload(r: BrokerBasketStopResult): Record<string, unknown> {
+  const diagnostics = r.errors.length > 0
+    ? r.errors.map(error => buildMgmtModifyFailureDiagnostic({
+        message: error.message,
+        skipReason: error.skipReason,
+      }))
+    : [buildMgmtModifyFailureDiagnostic({})]
+  const primary = primaryMgmtModifyDiagnostic(diagnostics)
+  if (!primary) return {}
+
+  const distinct = boundedDistinctReasonCodes(diagnostics.map(d => d.reason_code))
+  const orderedCodes = [
+    primary.reason_code,
+    ...distinct.codes.filter(code => code !== primary.reason_code),
+  ]
+  return {
+    ...mgmtModifyFailurePayload({
+      ...primary,
+      reason_code: MANAGEMENT_MODIFY_PARTIAL_REASON_CODE,
+      failure_reason: primary.failure_reason,
+    }),
+    primary_underlying_reason_code: primary.reason_code,
+    underlying_reason_codes: orderedCodes,
+    underlying_reason_counts: distinct.counts,
+    truncated_underlying_reason_codes: distinct.truncated,
+    mixed_failure: distinct.codes.length > 1,
+    partial_failure: r.modified + r.verified > 0 && (r.failed > 0 || r.skipped > 0),
+    leg_failures: r.errors.slice(0, MAX_SUMMARY_LEG_FAILURES).map(safeLegFailureDiagnostic),
+    truncated_leg_failures: r.errors.length > MAX_SUMMARY_LEG_FAILURES,
+  }
+}
+
+function mgmtModifySummaryRetryPending(r: BrokerBasketStopResult): boolean {
+  return r.openLegs > 0 && !r.fullySynced
+}
 
 export function mgmtUseChannelStopApply(): boolean {
   const v = String(process.env.MGMT_USE_CHANNEL_STOP_APPLY ?? 'true').toLowerCase().trim()
@@ -669,6 +965,7 @@ export async function applyChannelStopsToBaskets(
           { deepestTp: frozenDeepestTp },
         )
         if (!safe.ok) {
+          const diagnostic = buildMgmtModifyFailureDiagnostic({ message: safe.error ?? 'OrderModify failed' })
           await supabase.from('trade_execution_logs').insert({
             user_id: userId,
             signal_id: signalId,
@@ -676,7 +973,12 @@ export async function applyChannelStopsToBaskets(
             action: 'mgmt_modify',
             status: 'failed',
             error_message: safe.error ?? 'OrderModify failed',
-            request_payload: { ticket, trade_id: tr.id, channel_stop_apply: true } as unknown as Record<string, unknown>,
+            request_payload: {
+              ticket,
+              trade_id: tr.id,
+              channel_stop_apply: true,
+              ...mgmtModifyFailurePayload(diagnostic),
+            } as unknown as Record<string, unknown>,
           })
           return { ...noop(), failed: 1, error: { tradeId: tr.id, ticket, message: safe.error ?? 'OrderModify failed' } }
         }
@@ -684,10 +986,26 @@ export async function applyChannelStopsToBaskets(
         // (split TP-only success), the leg is not safe; flag for reconcile.
         const slRequested = !tpOnly && target.stoploss > 0
         if (slRequested && !safe.slApplied) {
+          const msg = safe.error ?? 'SL not applied'
+          const diagnostic = buildMgmtModifyFailureDiagnostic({ message: msg, skipReason: 'sl_not_applied' })
+          await supabase.from('trade_execution_logs').insert({
+            user_id: userId,
+            signal_id: signalId,
+            broker_account_id: brokerId,
+            action: 'mgmt_modify',
+            status: 'failed',
+            error_message: msg,
+            request_payload: {
+              ticket,
+              trade_id: tr.id,
+              channel_stop_apply: true,
+              ...mgmtModifyFailurePayload(diagnostic),
+            } as unknown as Record<string, unknown>,
+          })
           return {
             ...noop(),
             failed: 1,
-            error: { tradeId: tr.id, ticket, message: safe.error ?? 'SL not applied', skipReason: 'sl_not_applied' },
+            error: { tradeId: tr.id, ticket, message: msg, skipReason: 'sl_not_applied' },
           }
         }
 
@@ -698,13 +1016,29 @@ export async function applyChannelStopsToBaskets(
           || verifyLegStopOnBroker(ordersByTicket, ticket, target.stoploss)
 
         if (!brokerOk) {
+          const msg = 'broker SL mismatch after OrderModify'
+          const diagnostic = buildMgmtModifyFailureDiagnostic({ message: msg, skipReason: 'broker_verify_failed' })
+          await supabase.from('trade_execution_logs').insert({
+            user_id: userId,
+            signal_id: signalId,
+            broker_account_id: brokerId,
+            action: 'mgmt_modify',
+            status: 'failed',
+            error_message: msg,
+            request_payload: {
+              ticket,
+              trade_id: tr.id,
+              channel_stop_apply: true,
+              ...mgmtModifyFailurePayload(diagnostic),
+            } as unknown as Record<string, unknown>,
+          })
           return {
             ...noop(),
             failed: 1,
             error: {
               tradeId: tr.id,
               ticket,
-              message: 'broker SL mismatch after OrderModify',
+              message: msg,
               skipReason: 'broker_verify_failed',
             },
           }
@@ -748,6 +1082,7 @@ export async function applyChannelStopsToBaskets(
           return { ...noop(), skipped: 1 }
         }
         try {
+          const diagnostic = buildMgmtModifyFailureDiagnostic({ message: msg })
           await supabase.from('trade_execution_logs').insert({
             user_id: userId,
             signal_id: signalId,
@@ -755,7 +1090,12 @@ export async function applyChannelStopsToBaskets(
             action: 'mgmt_modify',
             status: 'failed',
             error_message: msg,
-            request_payload: { ticket, trade_id: tr.id, channel_stop_apply: true } as unknown as Record<string, unknown>,
+            request_payload: {
+              ticket,
+              trade_id: tr.id,
+              channel_stop_apply: true,
+              ...mgmtModifyFailurePayload(diagnostic),
+            } as unknown as Record<string, unknown>,
           })
         } catch { /* best-effort */ }
         return { ...noop(), failed: 1, error: { tradeId: tr.id, ticket, message: msg } }
@@ -836,8 +1176,10 @@ export async function logMgmtModifyBrokerSummaries(
   results: BrokerBasketStopResult[],
 ): Promise<void> {
   for (const r of results) {
-    if (r.openLegs === 0) continue
+    if (r.openLegs === 0 && r.errors.length === 0) continue
     try {
+      const failurePayload = r.fullySynced ? {} : mgmtModifySummaryFailurePayload(r)
+      const retryPending = mgmtModifySummaryRetryPending(r)
       await supabase.from('trade_execution_logs').insert({
         user_id: userId,
         signal_id: signalId,
@@ -854,7 +1196,11 @@ export async function logMgmtModifyBrokerSummaries(
           skipped: r.skipped,
           verified: r.verified,
           fully_synced: r.fullySynced,
-          skip_reasons: r.errors.map(e => e.skipReason ?? e.message),
+          retry_expected: retryPending,
+          retry_pending: retryPending,
+          reconcile_requested: !r.fullySynced && r.openLegs > 0,
+          skip_reasons: r.errors.map(e => e.skipReason ?? buildMgmtModifyFailureDiagnostic({ message: e.message }).failure_reason),
+          ...failurePayload,
         } as unknown as Record<string, unknown>,
       })
     } catch { /* best-effort */ }
