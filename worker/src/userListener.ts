@@ -169,6 +169,44 @@ const FAST_POLL_INTERVAL_MS = Math.max(
 const FAST_POLL_LIVE_STALE_MS = Math.max(
   60_000, Number(process.env.TELEGRAM_FAST_POLL_LIVE_STALE_MS ?? 2 * 60_000),
 )
+/**
+ * Max channels fetched per fast-poll tick. Bounds total read RPCs per account
+ * regardless of channel count (incident 2026-08-24: one user with 22 live-dead
+ * channels generated ~440 requests/min and constant Telegram flood waits).
+ */
+const FAST_POLL_BATCH = (() => {
+  const n = Number(process.env.TELEGRAM_FAST_POLL_BATCH ?? 6)
+  return Number.isFinite(n) ? Math.max(1, Math.min(50, n)) : 6
+})()
+/**
+ * Per-channel pacing inside the fast-poll set: a channel is re-fetched at
+ * most once per this interval, which doubles for each consecutive quiet poll
+ * (no new messages) up to the cap. A poll that finds messages resets the
+ * channel to base cadence so active channels keep low pickup latency.
+ */
+const FAST_POLL_MAX_CHANNEL_INTERVAL_MS = (() => {
+  const n = Number(process.env.TELEGRAM_FAST_POLL_MAX_CHANNEL_INTERVAL_MS ?? 30_000)
+  const cap = Number.isFinite(n) ? Math.min(300_000, n) : 30_000
+  return Math.max(FAST_POLL_INTERVAL_MS, cap)
+})()
+
+export type FastPollOutcome = 'messages' | 'empty' | 'failed' | 'skipped'
+
+/** Interval until a channel's next fast poll, given its consecutive-quiet-poll streak. */
+export function fastPollChannelIntervalMs(cleanStreak: number): number {
+  const doubled = FAST_POLL_INTERVAL_MS * 2 ** Math.max(0, cleanStreak)
+  return Math.min(doubled, FAST_POLL_MAX_CHANNEL_INTERVAL_MS)
+}
+
+/**
+ * Next clean streak after a poll outcome. Quiet polls stretch the interval;
+ * finding messages or an error resets to base; skipped polls leave it as-is.
+ */
+export function nextFastPollCleanStreak(cleanStreak: number, outcome: FastPollOutcome): number {
+  if (outcome === 'empty') return cleanStreak + 1
+  if (outcome === 'messages' || outcome === 'failed') return 0
+  return cleanStreak
+}
 const SESSION_PERSIST_INTERVAL_MS = 30 * 60_000
 const CATCHUP_BACKPRESSURE_MS = 250
 const CATCHUP_PER_CHANNEL_CAP = 200
@@ -474,6 +512,10 @@ export class UserListener {
   private fastPollRows: ChannelRow[] = []
   private fastPollRowsAt = 0
   private fastPollInFlight = false
+  /** Per-channel fast-poll pacing: row id → last attempt started at. */
+  private fastPollAttemptByRow = new Map<string, number>()
+  /** Per-channel fast-poll pacing: row id → consecutive quiet (no new messages) polls. */
+  private fastPollCleanStreakByRow = new Map<string, number>()
   /** In-memory live-push freshness per channel row (DB last_live_at can lag). */
   private lastLiveByRow = new Map<string, number>()
   private watchdogTimer: NodeJS.Timeout | null = null
@@ -660,6 +702,8 @@ export class UserListener {
     this.autoDisabledChannelRows.add(row.id)
     this.fastPollRows = this.fastPollRows.filter(r => r.id !== row.id)
     this.channelResolveCooldownUntil.delete(row.id)
+    this.fastPollAttemptByRow.delete(row.id)
+    this.fastPollCleanStreakByRow.delete(row.id)
     if (row.channel_id && isNumericTelegramChatId(String(row.channel_id))) {
       for (const v of toChannelIdVariants(String(row.channel_id))) this.monitoredChannels.delete(v)
     }
@@ -675,6 +719,8 @@ export class UserListener {
 
     this.channelInvalidFailures.delete(row.id)
     this.channelResolveCooldownUntil.delete(row.id)
+    // Start a re-enabled channel back at base fast-poll cadence.
+    this.fastPollCleanStreakByRow.delete(row.id)
     const detail = {
       source,
       ...safeChannelIdentifier(row),
@@ -3794,13 +3840,13 @@ export class UserListener {
    * Poll Telegram history for channels where live NewMessage updates are missing
    * (common when the linked account broadcasts to its own channel).
    */
-  private async pollChannelNewMessages(row: ChannelRow): Promise<void> {
-    if (this.isChannelLocallyDisabled(row)) return
+  private async pollChannelNewMessages(row: ChannelRow): Promise<FastPollOutcome> {
+    if (this.isChannelLocallyDisabled(row)) return 'skipped'
     const signalChannelId = row.signal_channel_id
       ?? await resolveSignalChannelIdForRow(this.supabase, row)
     if (isChannelRowPassive(signalChannelId, this.passiveSignalChannelIds)) {
       incMetric('channel_passive_poll_skipped')
-      return
+      return 'skipped'
     }
 
     let peer: unknown
@@ -3811,15 +3857,15 @@ export class UserListener {
         this.noteAuthKeyDuplicated('poll_peer_resolve', row.id, {
           error: (err instanceof Error ? err.message : String(err)).slice(0, 300),
         })
-        return
+        return 'failed'
       }
       if (isConfirmedChannelInvalidError(err)) {
         await this.noteChannelInvalid(row, 'poll_peer_resolve', err)
-        return
+        return 'failed'
       }
       if (isFloodWaitOrRetryExhaustion(err)) {
         this.noteFloodWaitBackoff(safeTelegramErrorMessage(err))
-        return
+        return 'failed'
       }
       const msg = err instanceof Error ? err.message : String(err)
       console.warn(
@@ -3833,7 +3879,7 @@ export class UserListener {
         channelRowId: row.id,
         detail: { error: msg.slice(0, 300) },
       })
-      return
+      return 'failed'
     }
     let minId = Number(row.last_seen_message_id ?? 0)
     if (!Number.isFinite(minId) || minId < 0) minId = 0
@@ -3850,15 +3896,15 @@ export class UserListener {
           error: (err instanceof Error ? err.message : String(err)).slice(0, 300),
           min_id: minId,
         })
-        return
+        return 'failed'
       }
       if (isConfirmedChannelInvalidError(err)) {
         await this.noteChannelInvalid(row, 'poll_getMessages', err)
-        return
+        return 'failed'
       }
       if (isFloodWaitOrRetryExhaustion(err)) {
         this.noteFloodWaitBackoff(safeTelegramErrorMessage(err))
-        return
+        return 'failed'
       }
       const msg = err instanceof Error ? err.message : String(err)
       console.warn(
@@ -3872,7 +3918,7 @@ export class UserListener {
         channelRowId: row.id,
         detail: { error: msg.slice(0, 300), min_id: minId },
       })
-      return
+      return 'failed'
     }
 
     this.lastSuccessfulPollAt = Date.now()
@@ -3880,17 +3926,17 @@ export class UserListener {
 
     if (!batch.length) {
       await this.runSignalTelegramReconcile('reconcile_poll_hook', row)
-      return
+      return 'empty'
     }
 
     const sorted = [...batch].sort((a, b) => Number(a.id) - Number(b.id))
     const latestId = Number(sorted[sorted.length - 1]?.id)
-    if (!Number.isFinite(latestId)) return
+    if (!Number.isFinite(latestId)) return 'failed'
 
     if (await loadCachedUserCopierPaused(this.supabase, this.userId)) {
       await this.bumpLastSeen(row.id, String(latestId))
       row.last_seen_message_id = latestId
-      return
+      return 'messages'
     }
 
     if (minId === 0) {
@@ -3909,13 +3955,13 @@ export class UserListener {
       console.log(
         `[userListener] poll seeded channel=${row.id} username=${row.channel_username || '-'} lastMsg=${latestId}`,
       )
-      return
+      return 'messages'
     }
 
     const toProcess = sorted.filter(m => Number(m.id) > minId)
     if (!toProcess.length) {
       await this.runSignalTelegramReconcile('reconcile_poll_hook', row)
-      return
+      return 'empty'
     }
 
     for (const m of toProcess) {
@@ -3925,6 +3971,7 @@ export class UserListener {
     // refetch the same batch on the next tick while the DB bump lags.
     row.last_seen_message_id = latestId
     await this.runSignalTelegramReconcile('reconcile_poll_hook', row)
+    return 'messages'
   }
 
   private async catchUpChannelRecent(row: ChannelRow): Promise<void> {
@@ -4668,8 +4715,13 @@ export class UserListener {
   /**
    * Poll only the channels Telegram is not delivering live NewMessage updates
    * for (last_live_at null or stale). Channels with healthy live push are left
-   * to the event handler + 30s safety poll. The channel list is cached and
+   * to the event handler + 10s safety poll. The channel list is cached and
    * refreshed every SAFETY_POLL_INTERVAL_MS to keep DB load flat.
+   *
+   * Volume is bounded two ways (incident 2026-08-24): at most FAST_POLL_BATCH
+   * channels per tick, least-recently-polled first; and each channel is paced
+   * by its quiet streak — quiet channels are re-fetched at doubling intervals
+   * up to FAST_POLL_MAX_CHANNEL_INTERVAL_MS, active channels stay at base.
    */
   private async runFastPoll(): Promise<void> {
     if (!this.isConnected || this.fastPollInFlight) return
@@ -4688,16 +4740,32 @@ export class UserListener {
       }
 
       const floodAtCycleStart = this.floodErrorsThisCycle
-      const staleRows = this.fastPollRows.filter(row => {
+      const dueRows = this.fastPollRows.filter(row => {
         if (this.isChannelLocallyDisabled(row)) return false
         const liveDb = row.last_live_at ? new Date(row.last_live_at).getTime() : 0
         const liveMem = this.lastLiveByRow.get(row.id) ?? 0
         const lastLive = Math.max(liveDb, liveMem)
-        return lastLive <= 0 || now - lastLive >= FAST_POLL_LIVE_STALE_MS
+        const isStale = lastLive <= 0 || now - lastLive >= FAST_POLL_LIVE_STALE_MS
+        if (!isStale) return false
+        // Per-channel pacing: skip channels fetched recently enough for their
+        // current quiet-streak (incident 2026-08-24 flood-wait pressure).
+        const lastAttempt = this.fastPollAttemptByRow.get(row.id) ?? 0
+        return now - lastAttempt >= fastPollChannelIntervalMs(this.fastPollCleanStreakByRow.get(row.id) ?? 0)
       })
-      await this.mapWithConcurrency(staleRows, CHANNEL_POLL_CONCURRENCY, async row => {
-        await this.pollChannelNewMessages(row).catch(err =>
-          console.warn(`[userListener] fast poll failed channel=${row.id}:`, err),
+      // Least-recently-polled first so the batch cap cannot starve channels.
+      dueRows.sort((a, b) =>
+        (this.fastPollAttemptByRow.get(a.id) ?? 0) - (this.fastPollAttemptByRow.get(b.id) ?? 0))
+      const batch = dueRows.slice(0, FAST_POLL_BATCH)
+      await this.mapWithConcurrency(batch, CHANNEL_POLL_CONCURRENCY, async row => {
+        this.fastPollAttemptByRow.set(row.id, Date.now())
+        const outcome = await this.pollChannelNewMessages(row)
+          .catch((err): FastPollOutcome => {
+            console.warn(`[userListener] fast poll failed channel=${row.id}:`, err)
+            return 'failed'
+          })
+        this.fastPollCleanStreakByRow.set(
+          row.id,
+          nextFastPollCleanStreak(this.fastPollCleanStreakByRow.get(row.id) ?? 0, outcome),
         )
       })
       this.endPollCycle(floodAtCycleStart)
