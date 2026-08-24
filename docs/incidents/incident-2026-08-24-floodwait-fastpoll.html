@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+  @page { size: A4; margin: 22mm 20mm; }
+  * { box-sizing: border-box; }
+  body { font-family: "Helvetica Neue", Arial, sans-serif; color: #1e293b; font-size: 10.5px; line-height: 1.5; margin: 0; }
+  h1 { font-size: 19px; margin: 0 0 2px 0; color: #0f172a; }
+  .subtitle { color: #64748b; font-size: 11px; margin-bottom: 12px; }
+  h2 { font-size: 12.5px; margin: 16px 0 6px 0; padding-bottom: 3px; border-bottom: 2px solid #2563eb; color: #0f172a; }
+  table { border-collapse: collapse; width: 100%; }
+  code { font-family: Menlo, Consolas, monospace; background: #f1f5f9; padding: 1px 4px; border-radius: 3px; font-size: 9.5px; }
+  .meta { width: 100%; margin-bottom: 6px; }
+  .meta td { padding: 4px 8px; vertical-align: top; border: 1px solid #e2e8f0; }
+  .meta .k { color: #64748b; font-weight: bold; width: 90px; text-transform: uppercase; font-size: 8.5px; letter-spacing: 0.5px; }
+  .pill { display: inline-block; padding: 2px 10px; border-radius: 999px; font-weight: bold; font-size: 9.5px; }
+  .pill.red { background: #fee2e2; color: #b91c1c; }
+  .box { border-left: 4px solid #2563eb; background: #eff6ff; padding: 8px 12px; margin: 8px 0; border-radius: 0 4px 4px 0; }
+  .box.green { border-left-color: #16a34a; background: #f0fdf4; }
+  .box.amber { border-left-color: #d97706; background: #fffbeb; }
+  ol, ul { margin: 4px 0 8px 18px; padding: 0; }
+  li { margin-bottom: 4px; }
+  .tbl { margin-top: 4px; }
+  .tbl th { background: #f1f5f9; text-align: left; padding: 4px 8px; border: 1px solid #e2e8f0; font-size: 9.5px; text-transform: uppercase; letter-spacing: 0.4px; color: #475569; }
+  .tbl td { padding: 4px 8px; border: 1px solid #e2e8f0; vertical-align: top; }
+</style>
+</head>
+<body>
+
+<h1>Sustained Telegram flood-wait pressure from unbounded channel polling</h1>
+<div class="subtitle">Incident report &middot; TScopier listener &middot; 2026-08-24</div>
+
+<table class="meta">
+  <tr>
+    <td class="k">Severity</td><td><span style="color:#b45309;font-weight:bold;">Medium</span></td>
+    <td class="k">Status</td><td><span class="pill red">Open — fix implemented</span></td>
+  </tr>
+  <tr>
+    <td class="k">Dates</td><td>Observed 2026-08-23 → 2026-08-24 (ongoing)</td>
+    <td class="k">Affected users</td><td>c8a32918…ccb1 (22 channels); all others unaffected or isolated</td>
+  </tr>
+  <tr>
+    <td class="k">Component</td><td><code>worker/src/userListener.ts</code> (Telegram polling)</td>
+    <td class="k">Root cause</td><td>Fast-poll graduation defect + no per-account poll rate cap</td>
+  </tr>
+</table>
+
+<h2>1. Executive summary (plain English)</h2>
+<div class="box green">
+One user copies 22 Telegram channels, nearly twice as many as any other customer. For channels where Telegram does not push messages to us immediately, our system fetches the messages itself every 3 seconds. A defect prevents those channels from ever leaving this fast fetching cycle, because a successful fetch does not count as proof that the channel is working. As a result the system sends up to roughly 440 read requests per minute on this one account, and Telegram answers most of them with "slow down" instructions. The listener stays stable thanks to the August 21 backoff fix, but the request volume itself remains far too high. Two targeted corrections to the polling schedule remove the excess volume without touching trade execution or signal handling.
+</div>
+
+<h2>2. Issue encountered</h2>
+<ul>
+  <li>Railway production logs show <strong>100–300 aggregated flood waits per minute</strong>, with individual waits of 13–26 seconds.</li>
+  <li>The adaptive backoff deployed on 2026-08-21 works as designed: pauses escalate <strong>120s → 240s → 480s</strong>; there are no crashes and no reconnect storms.</li>
+  <li>Despite the pauses, throttling resumes at full volume after each pause expires — a repeating cycle rather than recovery.</li>
+  <li>The affected account is responsible for nearly all recorded flood waits; only one other account (11 channels) triggered a single backoff event.</li>
+</ul>
+
+<h2>3. Affected user(s)</h2>
+<table class="tbl">
+  <tr><th>User</th><th>Active channels</th><th>Flood-wait pattern</th><th>Signals processed (24h)</th></tr>
+  <tr><td><code>c8a32918-9d96-4478-9869-a9e9cb1eccb1</code></td><td><strong>22</strong></td><td>100–300 waits/min; backoffs 120s–480s</td><td>~80 rows across all channels</td></tr>
+  <tr><td>All other users</td><td>&le; 13</td><td>None or isolated single events</td><td>Normal</td></tr>
+</table>
+<p>Channel-count distribution across users: 22, 13, 12, 11, 10, 8, 8, 6, 6, 5 … The affected user is a clear outlier.</p>
+
+<h2>4. Root cause</h2>
+<div class="box green">
+<strong>In plain English:</strong> Our system receives channel messages in two ways. Normally Telegram delivers each new message to us immediately, at no cost. When Telegram stops delivering messages for a channel, our system asks Telegram for that channel's latest messages instead — and it repeats this question every 3 seconds. The system was designed to notice when a channel is being delivered normally and stop asking; but the test it uses for "this channel is fine" can only be passed by delivered messages, never by answered questions. So a poll that succeeds still leaves the channel marked as "not delivering", and the system keeps asking every 3 seconds forever. On top of that, there is no limit on how many channels can be asked per cycle and no adjustment based on how many channels a user has. This user copies 22 channels; all of them are stuck in the fast cycle. That produces up to about 440 requests per minute on one Telegram account, and Telegram answers most of them with a wait instruction.
+</div>
+<p><strong>Technical detail:</strong> Two independent defects combine:</p>
+<ol>
+  <li><strong>Graduation defect</strong> (<code>worker/src/userListener.ts</code>). The function <code>bumpLastLive</code> (:3652) records the time of the last live-delivered message and is called only from the live event handlers (:1799, :1830). When the fast poll itself successfully retrieves new messages, only <code>bumpLastSeen</code> is called; <code>last_live_at</code> is never updated. The fast-poll staleness check (<code>runFastPoll</code>, :4674; check at :4696) requires a recent <code>last_live_at</code>, so any channel for which Telegram does not deliver live updates fails the check on every cycle indefinitely, even while polling succeeds.</li>
+  <li><strong>No rate cap.</strong> Each 3-second tick polls every stale channel (<code>FAST_POLL_INTERVAL_MS</code>, :165), with no limit on batch size and no adjustment for total channel count. With 22 stuck channels this yields up to ~440 read requests per minute on one Telegram account, far beyond Telegram's limits.</li>
+</ol>
+<div class="box">
+<strong>Evidence:</strong> a production database snapshot shows all 22 channels of the affected user with null or stale <code>last_live_at</code>, while several show fresh <code>last_seen_at</code> values written by polling itself — proof that polling succeeds but cannot reclassify a channel as active.
+</div>
+
+<h2>5. The fix (proposed)</h2>
+<p>Both changes are confined to the polling schedule inside <code>worker/src/userListener.ts</code>.</p>
+<ol>
+  <li><strong>Count successful polls toward liveness.</strong> After a poll completes without errors, record an in-memory marker that extends the effective liveness window for that channel. Channels are polled progressively less often (3s growing toward 15–30s) instead of being re-polled at maximum frequency forever. Channels that error continue into the existing invalid-channel auto-disable path unchanged.</li>
+  <li><strong>Cap the batch size per tick.</strong> Poll at most approximately six channels per 3-second cycle, always selecting the channels checked longest ago (least-recently-polled order). Every channel retains coverage within roughly 11 seconds regardless of how many channels a user has, and total request volume becomes bounded by arithmetic.</li>
+</ol>
+<div class="box amber">
+<strong>Safety of the change:</strong> trade execution, signal parsing, duplicate protection, the adaptive backoff, and the invalid-channel auto-disable path are not modified. Worst case for either change is a few extra seconds of delay before a rarely-active channel's message is noticed — whereas today, during throttling, delays are measured in tens of seconds and during backoff pauses nothing is read at all, so real-world latency improves.
+</div>
+
+<h2>6. Files changed</h2>
+<p>Not yet implemented. Planned scope:</p>
+<ul>
+  <li><code>worker/src/userListener.ts</code> — liveness marking in the poll success path; batch cap and rotation ordering in <code>runFastPoll</code>.</li>
+  <li>New tests alongside existing suites (node:test) covering graduation behavior, batch cap, and rotation fairness.</li>
+</ul>
+
+<h2>7. Verification</h2>
+<ul>
+  <li><code>npm --prefix worker run build</code> (typecheck).</li>
+  <li>Targeted node:test suites for the changed logic plus the full worker test suite (<code>npm --prefix worker test</code>).</li>
+  <li>Deploy to staging first; confirm on Railway logs that aggregate flood waits fall substantially and signal pickup latency stays within normal bounds before promoting to production.</li>
+</ul>
+
+<h2>8. Deployment status</h2>
+<p>Investigation complete 2026-08-24. No code has been changed yet; nothing deployed. Current production continues to rely on the August 21 adaptive backoff, which keeps the process stable but does not reduce request volume.</p>
+
+<h2>9. Follow-ups</h2>
+<ol>
+  <li>Implement fixes 1 and 2 above with tests; deploy staging-first per standard practice.</li>
+  <li>Confirm on production logs within 24 hours of deployment that aggregated flood waits for the affected account drop to near zero and no new signal-latency issues appear.</li>
+  <li>Consider whether the channel-add flow should warn users copying very large numbers of channels about expected pickup latency.</li>
+  <li>Unrelated observation from the same log review: Cerebras parser keys are returning HTTP 402 and falling back to OpenAI repeatedly — quota should be checked separately.</li>
+</ol>
+
+</body>
+</html>
