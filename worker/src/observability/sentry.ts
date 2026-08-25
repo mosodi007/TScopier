@@ -8,6 +8,7 @@ type SentryAdapter = Pick<typeof Sentry,
   | 'init'
   | 'captureException'
   | 'captureMessage'
+  | 'captureCheckIn'
   | 'addBreadcrumb'
   | 'setTag'
   | 'setContext'
@@ -390,6 +391,18 @@ export function captureWorkerMessage(message: string, opts: CaptureOptions): voi
     })
   } catch {
     // best-effort only
+  }
+}
+
+export function captureWorkerCheckIn(
+  checkIn: Parameters<typeof Sentry.captureCheckIn>[0],
+  monitorConfig?: Parameters<typeof Sentry.captureCheckIn>[1],
+): string | null {
+  if (!enabled) return null
+  try {
+    return sentry.captureCheckIn(checkIn, monitorConfig) ?? null
+  } catch {
+    return null
   }
 }
 

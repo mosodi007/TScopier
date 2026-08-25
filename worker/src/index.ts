@@ -7,6 +7,7 @@ import {
   initWorkerSentry,
   installWorkerProcessSentryHandlers,
 } from './observability/sentry'
+import { startWorkerHeartbeatCheckIns, stopWorkerHeartbeatCheckIns } from './observability/workerHeartbeat'
 // Must be loaded before any TelegramClient runtime code — patches console.log
 // to suppress GramJS flood-wait INFO noise (83% of log volume).
 import './gramjsLogSuppress'
@@ -47,6 +48,7 @@ import { initializeBrokerExecutionCapability } from './brokerExecutionMode'
 
 initWorkerSentry()
 installWorkerProcessSentryHandlers()
+startWorkerHeartbeatCheckIns()
 captureWorkerLog('info', 'worker startup', {
   subsystem: 'worker',
   operation: 'startup',
@@ -297,6 +299,7 @@ async function main() {
     }, warnAfterMs)
     shutdownWarnTimer.unref?.()
     httpServer?.close()
+    stopWorkerHeartbeatCheckIns()
     await authService?.shutdown()
     stopWorkWake?.()
     stopLogRetention?.()
