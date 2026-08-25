@@ -1,5 +1,10 @@
 import WebSocket from 'ws'
 import { normalizeFxsocketWsMessage } from './fxsocketStreamNormalize'
+import {
+  fxsocketSocketOutageGraceMs,
+  hashHealthResourceId,
+  SustainedOutageTracker,
+} from './observability/criticalHealth'
 
 const DEFAULT_BASE_URL = 'https://api.fxsocket.com'
 
@@ -22,6 +27,10 @@ export type FxsocketWsServerMessage =
   | { type: 'subscribed' | 'unsubscribed' | 'error' | 'warning'; [key: string]: unknown }
 
 export type FxsocketWsMessageHandler = (msg: FxsocketWsServerMessage) => void
+type FxsocketWsHealthMonitor = Pick<
+  SustainedOutageTracker,
+  'recordActivity' | 'recordConnected' | 'recordDisconnected' | 'recordReconnectAttempt' | 'reset'
+>
 
 export interface FxsocketWsClientOptions {
   accountId: string
@@ -32,6 +41,7 @@ export interface FxsocketWsClientOptions {
   reconnectDelayMs?: number
   maxReconnectDelayMs?: number
   onConnectionChange?: (connected: boolean) => void
+  healthMonitor?: FxsocketWsHealthMonitor | null
 }
 
 function trimEnv(v: string | undefined): string {
@@ -43,6 +53,14 @@ function wsBaseUrl(httpBase: string): string {
   if (u.startsWith('https://')) return `wss://${u.slice('https://'.length)}`
   if (u.startsWith('http://')) return `ws://${u.slice('http://'.length)}`
   return `wss://${u}`
+}
+
+function wsEndpointHost(wsUrl: string): string {
+  try {
+    return new URL(wsUrl).host.slice(0, 120)
+  } catch {
+    return 'fxsocket'
+  }
 }
 
 function subscriptionKey(frame: FxsocketWsSubscribeFrame): string {
@@ -60,6 +78,7 @@ export class FxsocketWsClient {
   private readonly reconnectDelayMs: number
   private readonly maxReconnectDelayMs: number
   private readonly onConnectionChange?: (connected: boolean) => void
+  private readonly healthMonitor: FxsocketWsHealthMonitor | null
 
   private ws: WebSocket | null = null
   private handlers = new Set<FxsocketWsMessageHandler>()
@@ -83,6 +102,24 @@ export class FxsocketWsClient {
     this.reconnectDelayMs = Math.max(500, opts.reconnectDelayMs ?? 2_000)
     this.maxReconnectDelayMs = Math.max(this.reconnectDelayMs, opts.maxReconnectDelayMs ?? 60_000)
     this.onConnectionChange = opts.onConnectionChange
+    this.healthMonitor = opts.healthMonitor === null
+      ? null
+      : opts.healthMonitor ?? new SustainedOutageTracker({
+        component: 'fx_socket',
+        failureClass: 'sustained_outage',
+        provider: 'fxsocket',
+        graceMs: fxsocketSocketOutageGraceMs(),
+        reasonCode: 'FXSOCKET_SOCKET_SUSTAINED_OUTAGE',
+        message: 'critical_health.fx_socket.sustained_outage',
+        fingerprint: ['critical_health', 'fx_socket', 'sustained_outage', 'fxsocket'],
+        dedupeKey: `fx_socket|fxsocket|${segment}|${wsEndpointHost(this.wsUrl)}`,
+        metadata: {
+          endpoint_host: wsEndpointHost(this.wsUrl),
+          platform: segment.toUpperCase(),
+          account_id_hash: hashHealthResourceId(id),
+          reconnect_enabled: this.reconnect,
+        },
+      })
   }
 
   get connected(): boolean {
@@ -108,7 +145,9 @@ export class FxsocketWsClient {
     this.ws = ws
 
     ws.on('open', () => {
+      if (this.ws !== ws) return
       this.reconnectAttempt = 0
+      this.reportHealth(monitor => monitor.recordConnected({ reason: 'socket_open' }))
       this.onConnectionChange?.(true)
       for (const frame of this.activeSubscriptions.values()) {
         this.sendFrame(frame)
@@ -116,8 +155,10 @@ export class FxsocketWsClient {
     })
 
     ws.on('message', (data) => {
+      if (this.ws !== ws) return
       const msg = this.parseMessage(data)
       if (!msg) return
+      this.reportHealth(monitor => monitor.recordActivity())
       for (const handler of this.handlers) {
         try { handler(msg) } catch (e) {
           console.warn('[fxsocketWsClient] handler error:', e instanceof Error ? e.message : e)
@@ -126,13 +167,22 @@ export class FxsocketWsClient {
     })
 
     ws.on('close', () => {
+      if (this.ws !== ws) return
+      this.ws = null
       this.onConnectionChange?.(false)
       if (!this.intentionalClose && this.reconnect && this.handlers.size > 0) {
+        this.reportHealth(monitor => monitor.recordDisconnected({
+          reconnectAttempt: this.reconnectAttempt,
+          reason: 'socket_close',
+        }))
         this.scheduleReconnect()
+      } else {
+        this.reportHealth(monitor => monitor.reset())
       }
     })
 
     ws.on('error', (err) => {
+      if (this.ws !== ws) return
       console.warn(`[fxsocketWsClient] socket error account=${this.accountId}:`, err.message)
     })
   }
@@ -140,6 +190,7 @@ export class FxsocketWsClient {
   close(): void {
     this.intentionalClose = true
     this.clearReconnectTimer()
+    this.reportHealth(monitor => monitor.reset())
     if (this.ws) {
       try { this.ws.close() } catch { /* ignore */ }
       this.ws = null
@@ -191,6 +242,11 @@ export class FxsocketWsClient {
       this.reconnectDelayMs * Math.pow(1.5, this.reconnectAttempt),
     )
     this.reconnectAttempt += 1
+    this.reportHealth(monitor => monitor.recordReconnectAttempt({
+      reconnectAttempt: this.reconnectAttempt,
+      reconnectDelayMs: delay,
+      reason: 'reconnect_scheduled',
+    }))
     this.reconnectTimer = setTimeout(() => {
       this.reconnectTimer = null
       if (!this.intentionalClose) this.connect()
@@ -202,6 +258,15 @@ export class FxsocketWsClient {
     if (this.reconnectTimer) {
       clearTimeout(this.reconnectTimer)
       this.reconnectTimer = null
+    }
+  }
+
+  private reportHealth(fn: (monitor: FxsocketWsHealthMonitor) => void): void {
+    if (!this.healthMonitor) return
+    try {
+      fn(this.healthMonitor)
+    } catch {
+      // Observability must never affect socket lifecycle, reconnect, or handlers.
     }
   }
 }

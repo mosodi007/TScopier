@@ -193,7 +193,8 @@ Rollback is code-only: frontend can be rolled back to its previous display and w
 The Node worker can emit sanitized Sentry events for final/exhausted failures:
 worker crashes, startup failures, shutdown timeouts, Telegram recovery exhaustion,
 channel auto-disable, queue dead letters, ambiguous broker sends, broker-success
-database persistence failures, and reconciliation failures. It is intentionally
+database persistence failures, reconciliation failures, and critical system-health
+outages. It is intentionally
 worker-only; frontend/backoffice, Supabase Edge Functions, and the Python
 Telethon listener should be added in separate PRs with runtime-specific policies.
 Business/operational issues use structured `captureMessage` events through the
@@ -223,6 +224,9 @@ SENTRY_ENVIRONMENT=production
 SENTRY_TRACES_SAMPLE_RATE=0
 SENTRY_BUSINESS_EVENTS_ENABLED=true
 SENTRY_BUSINESS_EVENT_COOLDOWN_MS=300000
+SENTRY_CRITICAL_HEALTH_ENABLED=true
+SENTRY_CRITICAL_HEALTH_COOLDOWN_MS=300000
+FXSOCKET_SOCKET_OUTAGE_GRACE_MS=60000
 ```
 
 `SENTRY_RELEASE` may be set explicitly. If omitted, the worker uses Railway commit
@@ -237,6 +241,36 @@ controlled with `SENTRY_LOGS_MIN_LEVEL=info|warn|error` (default `info`); set
 `warn` to lower cost and noise. The startup log (`operation=startup`) is emitted
 by every worker process, so an enabled worker proves connectivity within ~5s of
 boot.
+
+Critical health: sustained runtime/dependency outages are emitted through the
+central sanitized helper as `event_category=critical_health`, with bounded tags
+such as `component`, `failure_class`, `severity`, `state`, and `provider`.
+`FXSOCKET_SOCKET_OUTAGE_GRACE_MS` controls the browser/market-data WebSocket
+outage threshold. A transient FxSocket reconnect stays log-only; a disconnect
+that remains unavailable beyond the grace emits one `fx_socket` /
+`sustained_outage` event in the current worker process, suppresses retry storms
+during the same outage, and resets after successful reconnect. Equivalent
+provider/platform/endpoint outages from separate worker processes can still each
+reach Sentry; the shared fingerprint groups them into one issue.
+
+Dead/stalled worker detection requires an external observer. Configure one
+Sentry monitor slug per worker service/role to use SDK check-ins for process
+liveness:
+
+```env
+SENTRY_WORKER_HEARTBEAT_MONITOR_SLUG=tscopier-worker-trade
+SENTRY_WORKER_HEARTBEAT_ENABLED=true
+SENTRY_WORKER_HEARTBEAT_INTERVAL_MS=60000
+SENTRY_WORKER_HEARTBEAT_CHECKIN_MARGIN_MINUTES=2
+```
+
+The slug is intentionally opt-in to avoid accidental check-in volume. Use stable
+non-secret slugs such as `tscopier-worker-listener` or
+`tscopier-worker-trade-entry-shard-0`. Sentry missed-check-in alerting covers
+process death, hard stalls, and deploy failures where the process cannot emit an
+exception. It does not prove that the trade/copier pipeline is actively
+processing work. Keep external uptime checks on `/health` for listener readiness
+and lease mismatch paging.
 
 Sensitive data policy: Sentry events must not contain Telegram session strings,
 Telegram auth keys, Telegram API hashes, phone numbers, full emails, broker
@@ -267,8 +301,11 @@ DSN is present. Only isolated test Sentry environments should opt in with
 `SENTRY_LOAD_TEST_ENABLED=true`.
 
 Rollback for business events only: set `SENTRY_BUSINESS_EVENTS_ENABLED=false`
-and redeploy the worker. Set `SENTRY_ENABLED=false` to disable all worker Sentry
-events.
+and redeploy the worker. Roll back critical health events with
+`SENTRY_CRITICAL_HEALTH_ENABLED=false`; roll back worker check-ins with
+`SENTRY_WORKER_HEARTBEAT_ENABLED=false` or by clearing
+`SENTRY_WORKER_HEARTBEAT_MONITOR_SLUG`. Set `SENTRY_ENABLED=false` to disable all
+worker Sentry events and check-ins.
 
 **SQL drift check:** `scripts/diagnostics/listener_lease_drift.sql` — active `telegram_sessions` without a fresh lease.
 
