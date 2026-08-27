@@ -10,6 +10,7 @@ import { AppLayout } from './AppLayout'
 import { LiveChatProvider } from '../../context/LiveChatContext'
 import { AssistantProvider } from '../../context/AssistantContext'
 import { AssistantPanel } from '../assistant/AssistantPanel'
+import { AssistantLauncher } from '../assistant/AssistantLauncher'
 import { HumanReviewModal } from '../dashboard/HumanReviewModal'
 import { useNeedsWelcome } from '../../hooks/useNeedsWelcome'
 
@@ -41,6 +42,7 @@ export function AppShell() {
             <LiveChatProvider>
               <AssistantProvider>
                 <AppLayout />
+                <AssistantLauncher />
                 <AssistantPanel />
                 {!deferAppBootstrap ? <HumanReviewModal /> : null}
                 {needsWelcome ? (
