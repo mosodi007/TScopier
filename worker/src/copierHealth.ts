@@ -1,6 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { listenerWorkerId, workerConfig } from './workerConfig'
 import { addBusinessBreadcrumb, captureBusinessIssue } from './observability/businessEvents'
+import { captureWorkerWarning } from './observability/sentry'
 
 export type TelegramAccountState = 'not_linked' | 'linked' | 'invalid' | 'reconnect_required'
 export type SignalListenerState = 'connected' | 'reconnecting' | 'disconnected' | 'failed' | 'unknown'
@@ -192,7 +193,7 @@ export async function persistCopierHealth(
     if (!opts?.force && prev?.signature === sig && nowMs - prev.at < WRITE_MIN_MS) return 'skipped'
     lastWrites.set(userId, { at: nowMs, signature: sig })
     const requireLease = opts?.allowWithoutLease !== true && patch.workerOwnershipStatus === 'owned'
-    const { data, error } = await supabase.rpc('upsert_copier_listener_health', {
+    const rpcArgs = {
       p_user_id: userId,
       p_expected_worker_id: listenerWorkerId(),
       p_ownership_epoch: ownershipEpoch,
@@ -219,9 +220,24 @@ export async function persistCopierHealth(
       p_freshness_threshold_ms: freshnessThresholdMs,
       p_lease_acquired_at: leaseAcquiredAt,
       p_updated_at: new Date(nowMs).toISOString(),
-    })
+    }
+    // PostgREST drops JSON keys whose value is `undefined`, and
+    // upsert_copier_listener_health declares no argument defaults — a single
+    // missing key fails the entire call with PGRST202. Normalize every absent
+    // optional field to an explicit NULL so all named arguments arrive.
+    for (const key of Object.keys(rpcArgs)) {
+      if ((rpcArgs as Record<string, unknown>)[key] === undefined) {
+        ;(rpcArgs as Record<string, unknown>)[key] = null
+      }
+    }
+    const { data, error } = await supabase.rpc('upsert_copier_listener_health', rpcArgs)
     if (error) throw new Error(error.message)
     if (data !== true) {
+      console.warn(
+        `[copierHealth] upsert rejected (stale ownership) for user ${userId}`
+        + ` listener_status=${patch.listenerStatus ?? 'unknown'}`
+        + ` worker_ownership_status=${patch.workerOwnershipStatus ?? 'unknown'}`,
+      )
       addBusinessBreadcrumb({
         category: 'copier',
         event: 'listener_health_stale',
@@ -239,8 +255,22 @@ export async function persistCopierHealth(
       return 'stale_ownership'
     }
     return 'written'
-  } catch {
+  } catch (err) {
     // Health persistence is diagnostic only; never stop Telegram/trading.
+    // But never swallow it completely either: an empty health table leaves every
+    // dashboard stuck on "Checking…", so record the failure for diagnostics.
+    const message = err instanceof Error ? err.message : String(err)
+    console.warn(`[copierHealth] persist failed for user ${userId}: ${message}`)
+    captureWorkerWarning('copier_health_persist_failed', {
+      subsystem: 'copier_health',
+      operation: 'copier_health_persist',
+      errorCode: 'COPIER_HEALTH_PERSIST_FAILED',
+      context: {
+        stage: 'copier_health_persist',
+        userId,
+      },
+      extra: { message, listener_status: patch.listenerStatus },
+    })
     return 'error'
   }
 }

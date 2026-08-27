@@ -269,6 +269,38 @@ describe('copier health model', () => {
     assert.equal(calls[0]?.p_lease_acquired_at, '2026-08-06T12:00:00.000Z')
   })
 
+  it('rpc payload normalizes missing optional fields to null (PostgREST drops undefined keys)', async () => {
+    const calls: Array<Record<string, unknown>> = []
+    const supabase = { rpc: async (_fn: string, params: Record<string, unknown>) => { calls.push(params); return { data: true, error: null } } }
+    const result = await persistCopierHealth(supabase as never, 'user-a', {
+      telegramAccountStatus: 'linked',
+      listenerStatus: 'connected',
+      copierEngineStatus: 'operational',
+      workerOwnershipStatus: 'owned',
+      mtprotoConnected: true,
+    }, { ownershipEpoch: '2026-08-06T12:00:00.000Z', force: true })
+    assert.equal(result, 'written')
+    const params = calls[0] ?? {}
+    const expectedKeys = [
+      'p_user_id', 'p_expected_worker_id', 'p_ownership_epoch', 'p_require_lease',
+      'p_allow_without_lease', 'p_role', 'p_shard_id', 'p_shard_count',
+      'p_telegram_account_status', 'p_listener_status', 'p_copier_engine_status',
+      'p_worker_ownership_status', 'p_mtproto_connected', 'p_last_connected_at',
+      'p_last_disconnected_at', 'p_last_probe_at', 'p_last_successful_probe_at',
+      'p_consecutive_probe_failures', 'p_reconnect_started_at', 'p_reconnect_attempt',
+      'p_recovery_exhausted', 'p_shutdown_in_progress', 'p_health_reason',
+      'p_freshness_threshold_ms', 'p_lease_acquired_at', 'p_updated_at',
+    ]
+    for (const key of expectedKeys) {
+      assert.ok(Object.prototype.hasOwnProperty.call(params, key), `rpc payload missing ${key}`)
+      assert.notEqual(params[key], undefined, `rpc payload key ${key} is undefined`)
+    }
+    assert.equal(params.p_last_connected_at, null)
+    assert.equal(params.p_last_disconnected_at, null)
+    assert.equal(params.p_last_successful_probe_at, null)
+    assert.equal(params.p_health_reason, null)
+  })
+
   it('post-release terminal health writes are explicitly lease-optional', async () => {
     const calls: Array<Record<string, unknown>> = []
     const supabase = { rpc: async (_fn: string, params: Record<string, unknown>) => { calls.push(params); return { data: true, error: null } } }
