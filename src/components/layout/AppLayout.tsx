@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link, NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom'
-import { ChevronDown, PanelLeftClose, PanelLeftOpen, Menu, X, type LucideIcon } from 'lucide-react'
+import { ChevronDown, PanelLeftClose, PanelLeftOpen, Menu, Sparkles, X, type LucideIcon } from 'lucide-react'
 import clsx from 'clsx'
 import { getAppRouteIcon } from '../../lib/appNavIcons'
 import { TscopierLogo } from '../ui/TscopierLogo'
@@ -30,7 +30,11 @@ type NavItem = {
   showHighImpactNewsIndicator?: boolean
 }
 
-export function AppLayout() {
+type AppLayoutProps = {
+  onAssistantTrigger?: () => void
+}
+
+export function AppLayout({ onAssistantTrigger }: AppLayoutProps) {
   const t = useT()
   const { user, signOut } = useAuth()
   const navigate = useNavigate()
@@ -149,8 +153,10 @@ export function AppLayout() {
   )
 
   useEffect(() => {
-    setMobileNavOpen(false)
-    setNotificationsOpen(false)
+    queueMicrotask(() => {
+      setMobileNavOpen(false)
+      setNotificationsOpen(false)
+    })
   }, [location.pathname])
 
   // Subscription reminder modal on dashboard handles the nudge — no forced redirect.
@@ -179,6 +185,10 @@ export function AppLayout() {
   const handleSignOut = async () => {
     await signOut()
     navigate('/login')
+  }
+
+  const handleAssistantTrigger = () => {
+    onAssistantTrigger?.()
   }
 
   const displayName =
@@ -454,6 +464,19 @@ export function AppLayout() {
               </button>
             ) : null}
             <CopierPauseToggle />
+            <button
+              type="button"
+              onClick={handleAssistantTrigger}
+              aria-label={t.nav.assistant.ariaLabel}
+              title={t.nav.assistant.title}
+              className={clsx(
+                'inline-flex h-10 w-10 items-center justify-center rounded-lg text-teal-700 transition-colors',
+                'hover:bg-teal-50 focus:outline-none focus:ring-2 focus:ring-teal-500 focus:ring-offset-2 focus:ring-offset-white',
+                'dark:text-teal-300 dark:hover:bg-teal-950/50 dark:focus:ring-offset-neutral-900',
+              )}
+            >
+              <Sparkles className="h-5 w-5" aria-hidden />
+            </button>
             <AppSearchMobileTrigger />
             <LanguageSwitcher />
             <ThemeToggle />
