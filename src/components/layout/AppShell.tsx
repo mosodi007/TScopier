@@ -1,4 +1,4 @@
-import { lazy, Suspense, useCallback, useEffect, useState } from 'react'
+import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { BrokerAccountsProvider } from '../../context/BrokerAccountsContext'
 import { NotificationsProvider } from '../../context/NotificationsContext'
@@ -64,16 +64,20 @@ function AssistantSurface({
   onLauncherMinimizedChange,
   onLauncherPositionChange,
 }: AssistantSurfaceProps) {
-  const { openAssistant } = useAssistant()
+  const { open, openAssistant } = useAssistant()
+  const wasAssistantOpenRef = useRef(open)
 
   const handleAssistantTrigger = useCallback(() => {
-    if (launcherVisible) {
-      openAssistant()
-      return
+    openAssistant()
+  }, [openAssistant])
+
+  useEffect(() => {
+    if (wasAssistantOpenRef.current && !open) {
+      onLauncherVisibleChange(true)
+      onLauncherMinimizedChange(true)
     }
-    onLauncherVisibleChange(true)
-    onLauncherMinimizedChange(false)
-  }, [launcherVisible, onLauncherMinimizedChange, onLauncherVisibleChange, openAssistant])
+    wasAssistantOpenRef.current = open
+  }, [open, onLauncherMinimizedChange, onLauncherVisibleChange])
 
   return (
     <>
