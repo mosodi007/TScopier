@@ -4,20 +4,32 @@
 
 ### 2026-08-28 — npm audit fix: 15 vulnerabilities across root, worker, and backoffice — fixed
 
-- **Plain English:** GitHub Dependabot flagged 41 vulnerabilities across the repo. Most were in transitive dependencies — libraries our code depends on indirectly. None were in code we wrote ourselves. The fixes were all version bumps via `npm audit fix`: patched releases pulled in from upstream for `brace-expansion`, `nanoid`, `postcss`, `react-router`, `vite`, `ws`, `ip-address`, and `undici`. The risk was real (DoS, SSRF, path traversal, header injection), but none were actively exploited in our deployment context. All three package ecosystems are now clean.
+- **Plain English:** GitHub Dependabot flagged 41 vulnerabilities across the repo. Most were in transitive dependencies — libraries our code depends on indirectly. None were in code we wrote ourselves. The fixes were all version bumps via `npm audit fix`: patched releases pulled in from upstream. The risk was real (DoS, SSRF, path traversal, header injection), but none were actively exploited in our deployment context. All three package ecosystems are now clean.
 - **Root cause (technical):** Stale lockfile entries pinned vulnerable versions of transitive dependencies across three workspaces. Root had 8 issues (7 high, 1 low), worker had 3 high, backoffice had 4 (3 high, 1 moderate) — 15 total. All were upstream lockfile pins; no source code was vulnerable.
+- **Vulnerable packages:**
+  | Package | Workspace | Severity | Vulnerability | Fixed version |
+  |---------|-----------|----------|---------------|---------------|
+  | `brace-expansion` | root | high | DoS via unbounded expansion / exponential-time expansion / large numeric range defeats max | >5.0.8 |
+  | `nanoid` | root, backoffice | high | Non-secure generators loop indefinitely with negative/zero size | >3.3.17 |
+  | `postcss` | root, backoffice | high | Path traversal via sourceMappingURL / incomplete fix for attacker-controlled .map reads | >8.5.22 |
+  | `react-router` | root, backoffice | high | DoS via unbounded path expansion, CSRF, open redirect, XSS, constructor injection | >7.18.1 |
+  | `react-router-dom` | root, backoffice | high | Depends on vulnerable react-router | >7.14.2 |
+  | `vite` | root | high | NTLMv2 hash disclosure via UNC path, server.fs.deny bypass | >8.0.15 |
+  | `ws` | root, worker | high | Uninitialized memory disclosure, memory exhaustion DoS | >8.20.1 |
+  | `ip-address` | worker | high | SSRF via leading-zero octets, CIDR suffix bypass, IPv6 misclassification | >10.3.0 |
+  | `undici` | worker | high | Header injection, response desync, cookie attribute injection, DoS | >6.27.0 |
+  | `@babel/core` | root | low | Arbitrary file read via sourceMappingURL comment | patched |
 - **Fix (technical):**
   - `package-lock.json` (root): bumped `@babel/core`, `brace-expansion`, `nanoid`, `postcss`, `react-router`, `react-router-dom`, `vite`, `ws`.
   - `worker/package-lock.json`: bumped `ip-address`, `undici`, `ws`.
   - `apps/backoffice/package-lock.json`: bumped `nanoid`, `postcss`, `react-router`, `react-router-dom`.
   - `.gitignore`: one entry added.
   - No source code changes — all fixes are dependency version bumps.
-- **Tests/verification:** `npm audit` → 0 vulnerabilities (root). `npm --prefix worker audit` → 0 vulnerabilities. `npm --prefix apps/backoffice audit` → 0 vulnerabilities. `git diff --stat` confirms only lockfiles and `.gitignore` changed.
-- **Deploy state:** Changes on `staging` branch; NOT yet committed or pushed. Lockfile-only — safe to merge.
+- **Tests/verification:** `npm audit` → 0 vulnerabilities (root). `npm --prefix worker audit` → 0 vulnerabilities. `npm --prefix apps/backoffice audit` → 0 vulnerabilities. Installed versions verified: `ws@8.21.3`, `postcss@8.5.26`, `nanoid@3.3.18`, `undici@6.28.0`, `ip-address@10.5.0` — all above vulnerable ranges.
+- **Deploy state:** Committed on `staging` (`bb918f7e`), pushed to `origin/staging` + `upstream/staging` + `origin/dev` + `upstream/dev`.
 - **Follow-ups:**
-  1. Commit and push the lockfile changes.
-  2. Close any open Dependabot PRs after merge.
-  3. `EBADENGINE` warnings for eslint packages (node ^20.19 || ^22.13 || >=24 vs current v23.11.1) are cosmetic — not a security issue.
+  1. Close any open Dependabot PRs after merge.
+  2. `EBADENGINE` warnings for eslint packages (node ^20.19 || ^22.13 || >=24 vs current v23.11.1) are cosmetic — not a security issue.
 
 ### 2026-08-28 — Emmanuel's draggable floating assistant launcher (PR #143) — reviewed
 
