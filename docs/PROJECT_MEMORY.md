@@ -2,6 +2,38 @@
 
 ## Changelog
 
+### 2026-08-28 — npm audit fix: 15 vulnerabilities across root, worker, and backoffice — fixed
+
+- **Plain English:** GitHub Dependabot flagged 41 vulnerabilities across the repo. Most were in transitive dependencies — libraries our code depends on indirectly. None were in code we wrote ourselves. The fixes were all version bumps via `npm audit fix`: patched releases pulled in from upstream for `brace-expansion`, `nanoid`, `postcss`, `react-router`, `vite`, `ws`, `ip-address`, and `undici`. The risk was real (DoS, SSRF, path traversal, header injection), but none were actively exploited in our deployment context. All three package ecosystems are now clean.
+- **Root cause (technical):** Stale lockfile entries pinned vulnerable versions of transitive dependencies across three workspaces. Root had 8 issues (7 high, 1 low), worker had 3 high, backoffice had 4 (3 high, 1 moderate) — 15 total. All were upstream lockfile pins; no source code was vulnerable.
+- **Fix (technical):**
+  - `package-lock.json` (root): bumped `@babel/core`, `brace-expansion`, `nanoid`, `postcss`, `react-router`, `react-router-dom`, `vite`, `ws`.
+  - `worker/package-lock.json`: bumped `ip-address`, `undici`, `ws`.
+  - `apps/backoffice/package-lock.json`: bumped `nanoid`, `postcss`, `react-router`, `react-router-dom`.
+  - `.gitignore`: one entry added.
+  - No source code changes — all fixes are dependency version bumps.
+- **Tests/verification:** `npm audit` → 0 vulnerabilities (root). `npm --prefix worker audit` → 0 vulnerabilities. `npm --prefix apps/backoffice audit` → 0 vulnerabilities. `git diff --stat` confirms only lockfiles and `.gitignore` changed.
+- **Deploy state:** Changes on `staging` branch; NOT yet committed or pushed. Lockfile-only — safe to merge.
+- **Follow-ups:**
+  1. Commit and push the lockfile changes.
+  2. Close any open Dependabot PRs after merge.
+  3. `EBADENGINE` warnings for eslint packages (node ^20.19 || ^22.13 || >=24 vs current v23.11.1) are cosmetic — not a security issue.
+
+### 2026-08-28 — Emmanuel's draggable floating assistant launcher (PR #143) — reviewed
+
+- **Plain English:** Emmanuel (emmydapson) rebuilt the floating AI assistant launcher into a draggable widget. Users can now drag the launcher anywhere on screen, it persists position across page reloads (session-only), and can be fully dismissed with a close button. A new Sparkles button in the app header provides an alternative trigger path. The old version had internal state with sessionStorage; the new version properly lifts state to AppShell.
+- **Root cause (technical):** `AssistantLauncher.tsx` was rewritten to handle pointer-event dragging (setPointerCapture/releasePointerCapture), viewport clamping (respects mobile keyboard via visualViewport), a 4px dead-zone to distinguish drags from clicks, and click suppression after drag. Launcher state (visible/minimized/position) lifted from AssistantLauncher to AppShell. `AppLayout.tsx` gained a header toolbar trigger button.
+- **Review findings:**
+  - HIGH: Hardcoded English strings (subtitle, aria-labels) instead of existing i18n keys — breaks non-English locales.
+  - HIGH: Close-button aria-labels hardcoded in English.
+  - MEDIUM: `queueMicrotask` wrapping setState is unnecessary in React 19.
+  - MEDIUM: No keyboard-accessible drag alternative (pointer-only).
+  - LOW: Three separate useEffects for sessionStorage could be consolidated.
+- **Deploy state:** Merged to `staging` from `upstream/staging` (commit `12cc679a`). Pushed to `origin/staging`.
+- **Follow-ups:**
+  1. Fix i18n hardcoded strings — use `t.nav.assistant.subtitle` and `t.nav.assistant.close`.
+  2. Add keyboard drag alternative (arrow keys when focused) for WCAG 2.1 AA compliance.
+
 ### 2026-08-27 — Dashboard Copier status stuck on "Checking…" for 3 weeks — fixed
 
 - **Plain English:** The user dashboard's "Copier engine" and "Signal listener" lines were stuck on "Checking…" for everyone, indefinitely. The "All broker connections" and "Telegram account" lines on the same card worked normally, so the page was clearly not broken. What was wrong: the dashboard reads a server-authoritative table that the background service is supposed to write to every ~30 seconds saying "I am alive and connected." That table was **completely empty**. It had been empty for weeks. So the page was re-reading an empty table on a 30-second loop, and honestly reporting it had no data. The background service was running and looked healthy, but every attempt to write a status note was being rejected by the database and **silently swallowed** by a `try { … } catch { return 'error' }` that logged nothing. Three weeks of zero writes went unnoticed because there was no diagnostic anywhere — not in logs, not in monitoring. We verified the database and the page were both fine by manually writing one row, after which the dashboard immediately turned green. So the actual bug was in the background service's payload, and a defensive UI improvement was added so the same class of silent failure cannot produce a permanent fake-spinner state again. The same fix is also live in the admin "System Health" page: its "33/90 listening" tile was a weaker signal (lease-based) and can now use the truthful per-user connectivity from the same table when the worker is reporting.
@@ -18,10 +50,11 @@
   - Frontend: `npx tsc -b` — only pre-existing `src/lib/supabase.ts` realtime-type errors (duplicate `@supabase/realtime-js` packages, untouched file); my files compile clean. `npx vitest run src/lib/copierHealthStatus.test.ts` **7/7 pass**. `npx eslint` on changed frontend files: clean.
   - Admin repo (`~/projects/tscopier-admin`): `npm run typecheck` exit 0; `npx eslint src/lib/systemHealth.ts src/pages/SystemHealthPage.tsx` exit 0.
   - Live prod DB (via Supabase Management API) confirms the numbers behind the admin tile: 90 linked, 33 active leases, 33/90 "listening", and `copier_listener_health = 0 rows`. Of the 57 "linked not listening", 24 have no subscription, 19 no subscription + copier paused, 8 past-due + paused, 6 canceled + paused — all expected non-paying users, not a current outage.
-- **Deploy state:** Code change is committed locally; **NOT yet pushed or deployed**. Before deploying, please re-apply migration `20260806120000_copier_listener_health.sql` to whichever environment is missing it (verified applied on both staging and prod DBs). Then redeploy the worker to staging and verify that the first row appears in `copier_listener_health` and the dashboard stops showing "Checking…". After staging validation, redeploy to prod. Admin repo change can deploy in the same window.
+- **Deploy state:** Code change committed and pushed to `origin/staging`, `upstream/staging`, and `upstream/dev` (commit `ee6b85aa` → `69adb070`). Staging deploy pending Railway auto-deploy from `staging` branch. Prod deploy after staging validation.
 - **Follow-ups:**
   1. Investigate why only 33/62 (staging) and 33/90 (prod) sessions hold an active lease despite being "linked" — appears unrelated to this fix but coexists with it.
   2. Stand up an alert on `copier_health_persist_failed` (Sentry) so a future silent-failure class cannot recur.
+- **Also in this session:** `.gitignore` updated to exclude `.clinerules` (local agent config file).
   3. The Cerebras parser key on staging has been returning HTTP 402 ("Payment required") for several hours; signal parsing has been falling back to OpenAI on every parse. Check billing.
   4. The admin tile warning message still says "worker may have dropped" only as a last-resort reason; consider richer per-user reason in the LinkedNotListening modal.
 
