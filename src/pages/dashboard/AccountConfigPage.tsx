@@ -4414,8 +4414,8 @@ export function AccountConfigPage() {
                           </div>
                     </div>
 
-            <div className="shrink-0 px-4 sm:px-6 py-3 sm:py-4 border-t border-neutral-100 dark:border-neutral-800 flex flex-col-reverse sm:flex-row sm:items-center sm:justify-end gap-2 sm:gap-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] sm:pb-4">
-              <div className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-3 sm:ms-auto text-center sm:text-start">
+            <div className="shrink-0 px-4 sm:px-6 py-3 sm:py-4 border-t border-neutral-100 dark:border-neutral-800 flex flex-row flex-wrap items-center justify-end gap-2 pb-[max(0.75rem,env(safe-area-inset-bottom))] sm:pb-4">
+              <div className="flex flex-row items-center gap-1 sm:gap-3 sm:ms-auto text-center sm:text-start">
                 {configSavedAt != null && (
                   <span className="text-xs text-success-600 transition-opacity">{cm.saved}</span>
                 )}
@@ -4423,22 +4423,22 @@ export function AccountConfigPage() {
                   <span className="text-xs text-success-600 transition-opacity">{presetStatusMessage}</span>
                 )}
                         </div>
-              <Button variant="ghost" className="w-full sm:w-auto min-h-[44px]" onClick={() => closeConfigureModal()} disabled={configSaving || presetSaving}>{cm.cancel}</Button>
+              <Button variant="ghost" className="text-xs px-2.5 py-1.5 h-auto sm:w-auto sm:min-h-[44px] rounded-full whitespace-nowrap" onClick={() => closeConfigureModal()} disabled={configSaving || presetSaving}>{cm.cancel}</Button>
               {selectedChannelLinked && tradingPresets.length > 0 ? (
                 <Button
                   variant="secondary"
-                  className="w-full sm:w-auto min-h-[44px]"
+                  className="text-xs px-2.5 py-1.5 h-auto sm:w-auto sm:min-h-[44px] rounded-full whitespace-nowrap"
                   disabled={configSaving || presetSaving || presetsLoading}
                   onClick={openExportPresetsModal}
                 >
-                  <FileUp className="w-4 h-4 me-1.5" />
+                  <FileUp className="w-3.5 h-3.5 me-1" />
                   {cm.exportPresets}
                 </Button>
               ) : null}
               {selectedChannelLinked ? (
                 <Button
                   variant="secondary"
-                  className="w-full sm:w-auto min-h-[44px]"
+                  className="text-xs px-2.5 py-1.5 h-auto sm:w-auto sm:min-h-[44px] rounded-full whitespace-nowrap"
                   disabled={configSaving || presetSaving || presetsLoading}
                   onClick={() => {
                     setError('')
@@ -4451,18 +4451,18 @@ export function AccountConfigPage() {
               {selectedChannelLinked && selectedChannelEditedFromDefault ? (
                 <Button
                   variant="secondary"
-                  className="w-full sm:w-auto min-h-[44px]"
+                  className="text-xs px-2.5 py-1.5 h-auto sm:w-auto sm:min-h-[44px] rounded-full whitespace-nowrap"
                   loading={presetSaving}
                   disabled={configSaving || channelConnecting}
                   onClick={openSavePresetModal}
                 >
-                  <Bookmark className="w-4 h-4 me-1.5" />
+                  <Bookmark className="w-3.5 h-3.5 me-1" />
                   {cm.saveAsPreset}
                 </Button>
               ) : null}
               {selectedChannelLinked ? (
                 <Button
-                  className="w-full sm:w-auto min-h-[44px]"
+                  className="text-xs px-2.5 py-1.5 h-auto sm:w-auto sm:min-h-[44px] rounded-full whitespace-nowrap"
                   loading={configSaving}
                   disabled={!canSaveConfigureModal || presetSaving || channelConnecting || multiTradeSplitSaveBlocked}
                   title={multiTradeSplitSaveBlocked ? cm.risk.multiTradeSplitSaveBlocked : undefined}
