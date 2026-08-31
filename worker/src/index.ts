@@ -45,6 +45,7 @@ import type { Server } from 'http'
 import { telegramShutdownDrainMs } from './workerShutdown'
 import { registerOrderCloseAuditSupabase } from './orderCloseAudit'
 import { initializeBrokerExecutionCapability } from './brokerExecutionMode'
+import { testFlagEnabled } from './testFlags'
 
 initWorkerSentry()
 installWorkerProcessSentryHandlers()
@@ -60,6 +61,17 @@ captureWorkerLog('info', 'worker startup', {
     shard_count: workerConfig.shardCount,
   },
 })
+
+// TEST ONLY: force a critical uncaught exception to verify Sentry captures it.
+// Throws after a short delay so the process handlers + heartbeat are installed first.
+// Refused in production (see testFlags.ts). Remove the flag after the test to
+// avoid crash-looping the worker.
+if (testFlagEnabled(process.env, 'CRITICAL_EXCEPTION_TEST_FORCE')) {
+  const delayMs = Math.max(0, Math.min(60_000, Number(process.env.CRITICAL_EXCEPTION_TEST_DELAY_MS ?? 1000)))
+  setTimeout(() => {
+    throw new Error('TEST_FORCED_CRITICAL_EXCEPTION')
+  }, delayMs)
+}
 
 if (!globalThis.WebSocket) {
   globalThis.WebSocket = WebSocket as unknown as typeof globalThis.WebSocket

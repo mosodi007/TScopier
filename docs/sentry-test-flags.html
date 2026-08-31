@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+  @page { size: A4; margin: 22mm 20mm; }
+  * { box-sizing: border-box; }
+  body { font-family: "Helvetica Neue", Arial, sans-serif; color: #1e293b; font-size: 10.5px; line-height: 1.5; margin: 0; }
+  h1 { font-size: 19px; margin: 0 0 2px 0; color: #0f172a; }
+  .subtitle { color: #64748b; font-size: 11px; margin-bottom: 12px; }
+  h2 { font-size: 12.5px; margin: 16px 0 6px 0; padding-bottom: 3px; border-bottom: 2px solid #2563eb; color: #0f172a; }
+  table { border-collapse: collapse; width: 100%; }
+  code { font-family: Menlo, Consolas, monospace; background: #f1f5f9; padding: 1px 4px; border-radius: 3px; font-size: 9.5px; }
+  .meta { width: 100%; margin-bottom: 6px; }
+  .meta td { padding: 4px 8px; vertical-align: top; border: 1px solid #e2e8f0; }
+  .meta .k { color: #64748b; font-weight: bold; width: 90px; text-transform: uppercase; font-size: 8.5px; letter-spacing: 0.5px; }
+  .pill { display: inline-block; padding: 2px 10px; border-radius: 999px; font-weight: bold; font-size: 9.5px; }
+  .pill.green { background: #dcfce7; color: #15803d; }
+  .box { border-left: 4px solid #2563eb; background: #eff6ff; padding: 8px 12px; margin: 8px 0; border-radius: 0 4px 4px 0; }
+  .box.green { border-left-color: #16a34a; background: #f0fdf4; }
+  .box.amber { border-left-color: #d97706; background: #fffbeb; }
+  .box.red { border-left-color: #dc2626; background: #fef2f2; }
+  ol, ul { margin: 4px 0 8px 18px; padding: 0; }
+  li { margin-bottom: 4px; }
+  .tbl { margin-top: 4px; }
+  .tbl th { background: #f1f5f9; text-align: left; padding: 4px 8px; border: 1px solid #e2e8f0; font-size: 9.5px; text-transform: uppercase; letter-spacing: 0.4px; color: #475569; }
+  .tbl td { padding: 4px 8px; border: 1px solid #e2e8f0; vertical-align: top; }
+</style>
+</head>
+<body>
+
+<h1>Sentry critical health monitoring — test flags</h1>
+<div class="subtitle">Feature reference &middot; TScopier worker &middot; 2026-08-31</div>
+
+<table class="meta">
+  <tr>
+    <td class="k">Status</td><td><span class="pill green">Implemented — staging-only</span></td>
+    <td class="k">Environment</td><td>Staging (refused in production)</td>
+  </tr>
+  <tr>
+    <td class="k">Component</td><td><code>worker/src</code> — Sentry observability</td>
+    <td class="k">Scope</td><td>FxSocket outage, worker heartbeat, critical exception</td>
+  </tr>
+  <tr>
+    <td class="k">Files</td><td><code>testFlags.ts</code>, <code>fxsocketWsClient.ts</code>, <code>workerHeartbeat.ts</code>, <code>index.ts</code></td>
+    <td class="k">Status</td><td>Ready for staging validation</td>
+  </tr>
+</table>
+
+<h2>1. Executive summary (plain English)</h2>
+<div class="box green">
+The TScopier worker already sends alerts to Sentry when something critical breaks &mdash; for example when the FxSocket data connection stays down too long, when the worker process stops reporting, or when the process crashes. To make sure those alerts actually arrive, we added three small switches that intentionally force a failure on staging. You turn a switch on in Railway, watch Sentry for the expected alert, then turn the switch off and everything returns to normal. The switches do nothing on the live production system, so testing can never affect real customers.
+</div>
+
+<h2>2. What is monitored</h2>
+<p>The worker covers five critical failure domains. Four now have monitoring and test switches; one does not yet have monitoring.</p>
+<table class="tbl">
+  <tr><th>Domain</th><th>Monitoring</th><th>Test switch</th></tr>
+  <tr><td>FxSocket / API disconnected for a sustained period</td><td>Yes</td><td><code>FXSOCKET_TEST_FORCE_DISCONNECT</code></td></tr>
+  <tr><td>Worker process stops / heartbeat disappears</td><td>Yes</td><td><code>WORKER_HEARTBEAT_TEST_FORCE_STOP</code></td></tr>
+  <tr><td>Critical worker / runtime exception</td><td>Yes</td><td><code>CRITICAL_EXCEPTION_TEST_FORCE</code></td></tr>
+  <tr><td>System-wide trade execution failure</td><td>Yes</td><td><code>TRADE_PIPELINE_TEST_FORCE_FAILURE_RATE</code></td></tr>
+  <tr><td>Cron / background job stopped</td><td>No (planned)</td><td>&mdash;</td></tr>
+</table>
+
+<h2>3. The switches</h2>
+<p>All switches default to <strong>off</strong> (system fully operational, alerts active). They are <strong>ignored in a production environment</strong>, so a staging setting can never be copied into production by mistake. Turning a switch on forces the failure; turning it off (or removing it) restores normal behaviour immediately &mdash; no worker restart is needed for the FxSocket or heartbeat switches.</p>
+
+<table class="tbl">
+  <tr><th>Switch</th><th>Default</th><th>What it does when enabled</th><th>Sentry alert expected</th></tr>
+  <tr>
+    <td><code>FXSOCKET_TEST_FORCE_DISCONNECT</code></td>
+    <td>false</td>
+    <td>Immediately closes the FxSocket WebSocket connection(s) and keeps them down for the configured duration, then reconnects.</td>
+    <td>If down longer than the grace period (default 60s): Critical Issue <code>FXSOCKET_SOCKET_SUSTAINED_OUTAGE</code>. If shorter: no alert.</td>
+  </tr>
+  <tr>
+    <td><code>FXSOCKET_TEST_DISCONNECT_DURATION_MS</code></td>
+    <td>60000</td>
+    <td>How long the FxSocket connection stays down when the disconnect switch is on.</td>
+    <td>Over the grace period &rarr; alert fires; under it &rarr; no alert (short blip).</td>
+  </tr>
+  <tr>
+    <td><code>WORKER_HEARTBEAT_TEST_FORCE_STOP</code></td>
+    <td>false</td>
+    <td>Stops the worker from sending Sentry check-in pings each minute.</td>
+    <td>After the configured margin (default 2 min): Monitor <strong>Down / missed check-ins</strong>.</td>
+  </tr>
+  <tr>
+    <td><code>CRITICAL_EXCEPTION_TEST_FORCE</code></td>
+    <td>false</td>
+    <td>Throws an intentional uncaught exception shortly after startup.</td>
+    <td>Error Issue <code>UNCAUGHT_EXCEPTION</code>; heartbeat also stops &rarr; Monitor Down.</td>
+  </tr>
+  <tr>
+    <td><code>CRITICAL_EXCEPTION_TEST_DELAY_MS</code></td>
+    <td>1000</td>
+    <td>Optional delay before the forced exception fires.</td>
+    <td>&mdash;</td>
+  </tr>
+  <tr>
+    <td><code>TRADE_PIPELINE_TEST_FORCE_FAILURE_RATE</code></td>
+    <td>0</td>
+    <td>Forces N% (0&ndash;100) of trade executions to fail so the trade-pipeline monitor can fire.</td>
+    <td>Critical Issue <code>TRADE_PIPELINE_SYSTEMIC_FAILURE</code> once the failure rate exceeds the threshold over the window.</td>
+  </tr>
+</table>
+
+<div class="box green">
+<strong>Trade-pipeline monitor (real monitoring, active in production):</strong> the monitor counts trade successes and failures over a rolling window (<code>TRADE_PIPELINE_WINDOW_MS</code>, default 5 min) and alerts when the failure rate reaches <code>TRADE_PIPELINE_FAILURE_THRESHOLD_PCT</code> (default 50%) after at least <code>TRADE_PIPELINE_MIN_ATTEMPTS</code> (default 10) executions. Only the forced-failure injection is a staging test flag.
+</div>
+
+<div class="box red">
+<strong>Careful:</strong> <code>CRITICAL_EXCEPTION_TEST_FORCE</code> crashes the worker process (that is its purpose) and Railway restarts it. Remove the switch after the test, otherwise the worker will keep crash-looping.
+</div>
+
+<h2>4. How to test on staging</h2>
+<p>Set the switch in Railway &rarr; Variables, watch Sentry, then set the switch back to <code>false</code> (or remove it).</p>
+
+<table class="tbl">
+  <tr><th>Scenario</th><th>Switch to set</th><th>Expected result</th></tr>
+  <tr>
+    <td>FxSocket short disconnect (&lt; grace)</td>
+    <td><code>FXSOCKET_TEST_FORCE_DISCONNECT=true</code><br><code>FXSOCKET_TEST_DISCONNECT_DURATION_MS=30000</code></td>
+    <td>No alert &mdash; grace period absorbs the short blip.</td>
+  </tr>
+  <tr>
+    <td>FxSocket sustained disconnect (&gt; grace)</td>
+    <td><code>FXSOCKET_TEST_FORCE_DISCONNECT=true</code><br><code>FXSOCKET_TEST_DISCONNECT_DURATION_MS=90000</code></td>
+    <td>Critical Issue <code>FXSOCKET_SOCKET_SUSTAINED_OUTAGE</code> fires.</td>
+  </tr>
+  <tr>
+    <td>Recovery</td>
+    <td>Set <code>FXSOCKET_TEST_FORCE_DISCONNECT=false</code></td>
+    <td>Socket reconnects; recovery breadcrumb recorded; issue resolves.</td>
+  </tr>
+  <tr>
+    <td>Second outage after recovery</td>
+    <td>Add <code>SENTRY_CRITICAL_HEALTH_COOLDOWN_MS=0</code>, repeat the sustained-disconnect test</td>
+    <td>A new alert is allowed (not suppressed by the cooldown).</td>
+  </tr>
+  <tr>
+    <td>Heartbeat failure</td>
+    <td><code>WORKER_HEARTBEAT_TEST_FORCE_STOP=true</code></td>
+    <td>Monitor Down after the margin.</td>
+  </tr>
+  <tr>
+    <td>Critical exception</td>
+    <td><code>CRITICAL_EXCEPTION_TEST_FORCE=true</code></td>
+    <td>Error Issue <code>UNCAUGHT_EXCEPTION</code> + Monitor Down. Remove switch after.</td>
+  </tr>
+  <tr>
+    <td>Trade pipeline failure</td>
+    <td><code>TRADE_PIPELINE_TEST_FORCE_FAILURE_RATE=100</code> (and optionally lower <code>TRADE_PIPELINE_MIN_ATTEMPTS</code> / <code>FAILURE_THRESHOLD_PCT</code>)</td>
+    <td>Critical Issue <code>TRADE_PIPELINE_SYSTEMIC_FAILURE</code> once enough executions fail at/above the threshold within the window.</td>
+  </tr>
+</table>
+
+<h2>5. Production safety</h2>
+<div class="box green">
+All switches are read through a guard (<code>worker/src/testFlags.ts</code>) that refuses to act in a production environment. Production is detected from <code>SENTRY_ENVIRONMENT</code>, <code>RAILWAY_ENVIRONMENT_NAME</code>, or <code>NODE_ENV</code> being <code>production</code> / <code>prod</code>; when none is set the default is treated as production, so the switches stay off unless a staging environment name is explicitly set. This means a staging environment variable set can never crash-loop or disconnect the live trade worker.
+</div>
+
+<h2>6. Files changed</h2>
+<ul>
+  <li><code>worker/src/testFlags.ts</code> (+ <code>testFlags.test.ts</code>) &mdash; production guard and flag helpers.</li>
+  <li><code>worker/src/fxsocketWsClient.ts</code> &mdash; force-disconnect path in <code>connect()</code> + scheduled reconnect.</li>
+  <li><code>worker/src/observability/workerHeartbeat.ts</code> &mdash; skip check-ins when the stop switch is on.</li>
+  <li><code>worker/src/index.ts</code> &mdash; forced uncaught exception path.</li>
+  <li><code>worker/.env.example</code>, <code>docs/sentry-critical-health-plan.md</code> &mdash; documentation.</li>
+</ul>
+
+<h2>7. Verification</h2>
+<ul>
+  <li>Worker build (typecheck): <code>npm --prefix worker run build</code> &mdash; passes.</li>
+  <li>Targeted tests: 68 node:test cases pass (FxSocket health, test flags, worker heartbeat, critical health, Sentry).</li>
+  <li>Deploy to staging, run the scenario checks above, and confirm each expected alert arrives in Sentry before promoting to production.</li>
+</ul>
+
+<h2>8. Deployment status</h2>
+<p>Implemented and reviewed (PASS_WITH_NOTES; all actionable findings resolved). Not yet deployed &mdash; pending staging validation. To deploy, set <code>SENTRY_ENABLED=true</code> and <code>SENTRY_DSN</code> on the staging worker service per the existing worker Sentry policy, then run the scenario checks.</p>
+
+<h2>9. Follow-ups</h2>
+<ol>
+  <li>Run the full scenario matrix on staging and record the observed Sentry alerts for each switch (including the trade-pipeline failure).</li>
+  <li>Build monitoring for the remaining domain (cron/job stall) and add a matching test switch.</li>
+  <li>Reconsider the production-name detection (currently <code>production</code> / <code>prod</code>) if a future production environment uses a different name.</li>
+</ol>
+
+</body>
+</html>
