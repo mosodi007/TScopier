@@ -144,6 +144,7 @@ type ClientModule = typeof import('./fxsocketWsClient')
 const nodeRequire = createRequire(__filename)
 const wsModulePath = nodeRequire.resolve('ws')
 const clientModulePath = nodeRequire.resolve('./fxsocketWsClient')
+const managerModulePath = nodeRequire.resolve('./fxsocketStreamManager')
 const originalWsModule = nodeRequire.cache[wsModulePath]
 
 function loadClientModule(): ClientModule {
@@ -162,8 +163,30 @@ function loadClientModule(): ClientModule {
   return nodeRequire('./fxsocketWsClient') as ClientModule
 }
 
+type ManagerModule = typeof import('./fxsocketStreamManager')
+
+/** Loads the manager with the ws module mocked to FakeWebSocket so we can observe socket creation. */
+function loadManagerModule(): ManagerModule {
+  delete nodeRequire.cache[managerModulePath]
+  delete nodeRequire.cache[clientModulePath]
+  nodeRequire.cache[wsModulePath] = {
+    id: wsModulePath,
+    filename: wsModulePath,
+    loaded: true,
+    exports: FakeWebSocket,
+    children: [],
+    paths: [],
+    isPreloading: false,
+    require: nodeRequire,
+    parent: null,
+  } as unknown as NodeModule
+  const mod = nodeRequire('./fxsocketStreamManager') as ManagerModule
+  return mod
+}
+
 function restoreModules(): void {
   delete nodeRequire.cache[clientModulePath]
+  delete nodeRequire.cache[managerModulePath]
   if (originalWsModule) nodeRequire.cache[wsModulePath] = originalWsModule
   else delete nodeRequire.cache[wsModulePath]
 }
@@ -502,4 +525,33 @@ test('FXSOCKET_TEST_FORCE_DISCONNECT takes down an already-open socket immediate
   client.close()
   delete process.env.SENTRY_ENVIRONMENT
   delete process.env.FXSOCKET_TEST_FORCE_DISCONNECT
+})
+
+test('FxsocketStreamManager creates a health probe when FXSOCKET_TEST_FORCE_DISCONNECT is on', () => {
+  const mock = setupSentry()
+  process.env.SENTRY_ENVIRONMENT = 'staging'
+  process.env.FXSOCKET_TEST_FORCE_DISCONNECT = 'true'
+  const { FxsocketStreamManager } = loadManagerModule()
+  const manager = new FxsocketStreamManager({ apiKey: 'test-key' })
+
+  // The flag branch in connect() returns before opening a socket, so the probe
+  // must never create a real WebSocket even though it was constructed + connected.
+  assert.equal(FakeWebSocket.instances.length, 0, 'probe must not open a real socket under the flag')
+  manager.closeAll()
+  delete process.env.SENTRY_ENVIRONMENT
+  delete process.env.FXSOCKET_TEST_FORCE_DISCONNECT
+  assert.equal(mock.capturedMessages.length, 0, 'no alert before grace period elapses')
+})
+
+test('FxsocketStreamManager does not create a health probe when the flag is off', () => {
+  setupSentry()
+  process.env.SENTRY_ENVIRONMENT = 'staging'
+  delete process.env.FXSOCKET_TEST_FORCE_DISCONNECT
+  const { FxsocketStreamManager } = loadManagerModule()
+  const manager = new FxsocketStreamManager({ apiKey: 'test-key' })
+
+  // With the flag off there is no probe and no socket should be opened on construction.
+  assert.equal(FakeWebSocket.instances.length, 0, 'no probe should be created when flag is off')
+  manager.closeAll()
+  delete process.env.SENTRY_ENVIRONMENT
 })
