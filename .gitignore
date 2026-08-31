@@ -26,6 +26,13 @@ supabase/.temp/
 # Local-only agent files (personal config + investigation scratchpads)
 AGENTS.md
 opencode.json
+.clinerules
 docs/scratchpads/
 docs/scratchpad-*.md
+
+# Agent bridge scripts (local dev only)
+scripts/cline-bridge.mjs
+scripts/cline-review.sh
+scripts/cline-runner.mjs
+scripts/opencode-bridge.mjs
 

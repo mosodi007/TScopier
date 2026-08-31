@@ -98,6 +98,9 @@ export function CopierStatusCard({
     updatedAt: null,
     reason: null,
   })
+  // Number of completed server snapshots. Distinguishes an initial "checking"
+  // pass from a persistent "no data" state (reporter never wrote a health row).
+  const [healthSnapshots, setHealthSnapshots] = useState(0)
 
   const toggleExpanded = useCallback(() => {
     setExpanded(prev => {
@@ -115,6 +118,7 @@ export function CopierStatusCard({
     if (!userId) return
     const snap = await fetchCopierHealthStatus(supabase, userId)
     setCopierHealth(snap)
+    setHealthSnapshots(count => count + 1)
   }, [userId])
 
   useEffect(() => {
@@ -153,7 +157,10 @@ export function CopierStatusCard({
             updatedAt: null,
             reason: null,
           }
-      if (!cancelled) setCopierHealth(snap)
+      if (!cancelled) {
+        setCopierHealth(snap)
+        setHealthSnapshots(count => count + 1)
+      }
     })()
     if (!userId) {
       return () => {
@@ -215,6 +222,20 @@ export function CopierStatusCard({
   const telegramAccount = accountLabel(copierHealth.telegramAccountStatus)
   const listener = listenerLabel(copierHealth.signalListenerStatus)
 
+  // After two empty snapshots (~30s of polling), an all-unknown row is no longer
+  // "checking" — the worker has not reported for this account at all. Say so
+  // explicitly instead of showing a perpetual spinner-style status.
+  const healthUnreported =
+    hasActiveSubscription &&
+    healthSnapshots >= 2 &&
+    copierHealth.copierEngineStatus === 'unknown'
+  if (healthUnreported) {
+    engine.label = 'Unknown'
+    if (copierHealth.signalListenerStatus === 'unknown') {
+      listener.label = 'Unknown'
+    }
+  }
+
   const statusMessage =
     copierHealth.telegramAccountStatus === 'reconnect_required' || copierHealth.telegramAccountStatus === 'invalid'
       ? 'Telegram connection expired. Reconnect Telegram to resume copying.'
@@ -226,7 +247,9 @@ export function CopierStatusCard({
             ? 'Copying is stopped for this account.'
             : copierHealth.copierEngineStatus === 'offline'
               ? 'Signal listener is offline. Trades may not copy until it reconnects.'
-              : 'Checking copier status.'
+              : healthUnreported
+                ? 'Copier status has not reported yet. If this continues, the signal listener may be offline.'
+                : 'Checking copier status.'
 
   const lastHealthy = copierHealth.lastSuccessfulHealthAt
     ? new Date(copierHealth.lastSuccessfulHealthAt).toLocaleString()
@@ -242,14 +265,17 @@ export function CopierStatusCard({
   const isChecking =
     hasActiveSubscription &&
     !hasIssues &&
+    !healthUnreported &&
     (engine.tone === 'muted' || copierHealth.copierEngineStatus === 'unknown')
   const collapsedSummaryTone: Tone = !hasActiveSubscription
     ? 'muted'
     : hasIssues
       ? 'bad'
-      : isChecking
+      : healthUnreported
         ? 'muted'
-        : 'ok'
+        : isChecking
+          ? 'muted'
+          : 'ok'
 
   const collapsedSummary = !hasActiveSubscription
     ? t.pricing.billing.noActiveSubscription
@@ -257,7 +283,9 @@ export function CopierStatusCard({
       ? cs.checksFailed
       : isChecking
         ? cs.checking
-        : cs.allChecksPassed
+        : healthUnreported
+          ? 'Unknown'
+          : cs.allChecksPassed
 
   return (
     <div

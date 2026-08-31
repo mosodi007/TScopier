@@ -93,6 +93,12 @@ export class UserSessionManager {
   private channelChannel: RealtimeChannel | null = null
   private authPendingChannel: RealtimeChannel | null = null
   private realtimeHealthTimer: NodeJS.Timeout | null = null
+  /** One pending retry timer per realtime topic — prevents retry storms. */
+  private realtimeRetryTimers = new Map<string, NodeJS.Timeout>()
+  /** Consecutive failed attempts per topic; drives exponential backoff. */
+  private realtimeRetryAttempts = new Map<string, number>()
+  /** Monotonic counter so every realtime channel gets a unique topic name. */
+  private realtimeChannelSeq = 0
   private tradeExecutor: TradeExecutor | null = null
   /** Serializes start/stop/adopt for one user — prevents AUTH_KEY_DUPLICATED races. */
   private userConnectionLocks = new Map<string, Promise<void>>()
@@ -431,63 +437,144 @@ export class UserSessionManager {
     }
   }
 
+  private realtimeRetryBaseMs(): number {
+    const n = Number(process.env.REALTIME_RETRY_BASE_MS ?? 5000)
+    return Number.isFinite(n) && n >= 0 ? n : 5000
+  }
+
+  /**
+   * Re-subscribe after a realtime channel failure. supabase-js .channel()
+   * always registers a NEW channel object, so every failed attempt can leave
+   * a zombie behind if removeChannel() never confirms. Sweep ALL channels
+   * under the topic prefix (unique names per attempt) before re-subscribing.
+   */
+  private async resubscribeRealtime(topicPrefix: string, subscribe: () => void) {
+    const stale = this.supabase.getChannels().filter(c => c.topic.startsWith(topicPrefix))
+    await Promise.all(
+      stale.map(c => this.supabase.removeChannel(c).catch(() => { /* best effort */ })),
+    )
+    subscribe()
+  }
+
+  private scheduleRealtimeRetry(topic: string, subscribe: () => void) {
+    // Dedup: many zombie channels can fire CLOSED in the same flap; a single
+    // pending timer per topic is enough (incident 2026-08-25 retry storm).
+    if (this.realtimeRetryTimers.has(topic)) return
+    const attempt = this.realtimeRetryAttempts.get(topic) ?? 0
+    const delay = Math.min(this.realtimeRetryBaseMs() * 2 ** attempt, 60_000)
+    this.realtimeRetryAttempts.set(topic, attempt + 1)
+    const timer = setTimeout(() => {
+      this.realtimeRetryTimers.delete(topic)
+      this.resubscribeRealtime(topic, subscribe).catch(err =>
+        console.warn(`[sessionManager] realtime resubscribe for ${topic} failed:`, err),
+      )
+    }, delay)
+    this.realtimeRetryTimers.set(topic, timer)
+  }
+
+  private clearRealtimeRetryTimer(topic: string): void {
+    const timer = this.realtimeRetryTimers.get(topic)
+    if (timer) {
+      clearTimeout(timer)
+      this.realtimeRetryTimers.delete(topic)
+    }
+  }
+
   private subscribeToChannelChanges() {
     if (this.channelChannel) return
 
-    this.channelChannel = this.supabase
-      .channel('telegram_channels_changes')
-      .on(
-        'postgres_changes' as never,
-        { event: '*', schema: 'public', table: 'telegram_channels' } as never,
-        (payload: { new?: Record<string, unknown>; old?: Record<string, unknown> }) => {
-          const userId = (payload.new?.user_id ?? payload.old?.user_id) as string | undefined
-          if (!userId) return
-          if (!userBelongsToShard(userId)) return
-          const listener = this.listeners.get(userId)
-          if (!listener) return
-          listener.onChannelsChanged().catch(err =>
-            console.error(`[sessionManager] onChannelsChanged failed for ${userId}:`, err),
-          )
-        },
+    try {
+      const topic = 'realtime:telegram_channels_changes'
+      const name = `telegram_channels_changes_${++this.realtimeChannelSeq}`
+      const ch = this.supabase
+        .channel(name)
+        .on(
+          'postgres_changes' as never,
+          { event: '*', schema: 'public', table: 'telegram_channels' } as never,
+          (payload: { new?: Record<string, unknown>; old?: Record<string, unknown> }) => {
+            const userId = (payload.new?.user_id ?? payload.old?.user_id) as string | undefined
+            if (!userId) return
+            if (!userBelongsToShard(userId)) return
+            const listener = this.listeners.get(userId)
+            if (!listener) return
+            listener.onChannelsChanged().catch(err =>
+              console.error(`[sessionManager] onChannelsChanged failed for ${userId}:`, err),
+            )
+          },
+        )
+      this.channelChannel = ch
+      ch.subscribe(status => {
+          if (status === 'SUBSCRIBED') {
+            console.log('[sessionManager] Realtime telegram_channels subscription active')
+            this.realtimeRetryAttempts.delete(topic)
+          } else if (status === 'CLOSED' || status === 'CHANNEL_ERROR') {
+            // Ignore callbacks from zombie channels that are no longer the
+            // current subscription; only the live ref may schedule a retry.
+            if (this.channelChannel !== ch) return
+            console.warn(`[sessionManager] Realtime telegram_channels subscription ${status} — retrying`)
+            const failed = this.channelChannel
+            this.channelChannel = null
+            // Remove the errored channel from the client registry before
+            // retrying; otherwise supabase-js returns the same already-
+            // subscribed instance and re-registering handlers throws an
+            // uncaught error that kills the worker (incident 2026-08-24).
+            if (failed) this.supabase.removeChannel(failed).catch(() => { /* swept by resubscribeRealtime */ })
+            this.scheduleRealtimeRetry(topic, () => this.subscribeToChannelChanges())
+          }
+        })
+    } catch (err) {
+      console.warn(
+        '[sessionManager] telegram_channels resubscribe failed — retrying:',
+        err instanceof Error ? err.message : err,
       )
-      .subscribe(status => {
-        if (status === 'SUBSCRIBED') {
-          console.log('[sessionManager] Realtime telegram_channels subscription active')
-        } else if (status === 'CLOSED' || status === 'CHANNEL_ERROR') {
-          console.warn(`[sessionManager] Realtime telegram_channels subscription ${status} — retrying in 5s`)
-          this.channelChannel = null
-          setTimeout(() => this.subscribeToChannelChanges(), 5000)
-        }
-      })
+      this.channelChannel = null
+      this.scheduleRealtimeRetry('realtime:telegram_channels_changes', () => this.subscribeToChannelChanges())
+    }
   }
 
   private subscribeToAuthPendingChanges() {
     if (this.authPendingChannel) return
 
-    this.authPendingChannel = this.supabase
-      .channel('telegram_auth_pending_changes')
-      .on(
-        'postgres_changes' as never,
-        { event: '*', schema: 'public', table: 'telegram_auth_pending' } as never,
-        (payload: { eventType?: string; new?: Record<string, unknown>; old?: Record<string, unknown> }) => {
-          const userId = (payload.new?.user_id ?? payload.old?.user_id) as string | undefined
-          if (!userId || !userBelongsToShard(userId)) return
-          if (payload.eventType === 'DELETE') {
-            void this.onAuthPendingCleared(userId)
-            return
+    try {
+      const topic = 'realtime:telegram_auth_pending_changes'
+      const name = `telegram_auth_pending_changes_${++this.realtimeChannelSeq}`
+      const ch = this.supabase
+        .channel(name)
+        .on(
+          'postgres_changes' as never,
+          { event: '*', schema: 'public', table: 'telegram_auth_pending' } as never,
+          (payload: { eventType?: string; new?: Record<string, unknown>; old?: Record<string, unknown> }) => {
+            const userId = (payload.new?.user_id ?? payload.old?.user_id) as string | undefined
+            if (!userId || !userBelongsToShard(userId)) return
+            if (payload.eventType === 'DELETE') {
+              void this.onAuthPendingCleared(userId)
+              return
+            }
+            void this.stopListenerForPendingAuth(userId)
+          },
+        )
+      this.authPendingChannel = ch
+      ch.subscribe(status => {
+          if (status === 'SUBSCRIBED') {
+            console.log('[sessionManager] Realtime telegram_auth_pending subscription active')
+            this.realtimeRetryAttempts.delete(topic)
+          } else if (status === 'CLOSED' || status === 'CHANNEL_ERROR') {
+            if (this.authPendingChannel !== ch) return
+            console.warn(`[sessionManager] Realtime telegram_auth_pending subscription ${status} — retrying`)
+            const failed = this.authPendingChannel
+            this.authPendingChannel = null
+            if (failed) this.supabase.removeChannel(failed).catch(() => { /* swept by resubscribeRealtime */ })
+            this.scheduleRealtimeRetry(topic, () => this.subscribeToAuthPendingChanges())
           }
-          void this.stopListenerForPendingAuth(userId)
-        },
+        })
+    } catch (err) {
+      console.warn(
+        '[sessionManager] telegram_auth_pending resubscribe failed — retrying:',
+        err instanceof Error ? err.message : err,
       )
-      .subscribe(status => {
-        if (status === 'SUBSCRIBED') {
-          console.log('[sessionManager] Realtime telegram_auth_pending subscription active')
-        } else if (status === 'CLOSED' || status === 'CHANNEL_ERROR') {
-          console.warn(`[sessionManager] Realtime telegram_auth_pending subscription ${status} — retrying in 5s`)
-          this.authPendingChannel = null
-          setTimeout(() => this.subscribeToAuthPendingChanges(), 5000)
-        }
-      })
+      this.authPendingChannel = null
+      this.scheduleRealtimeRetry('realtime:telegram_auth_pending_changes', () => this.subscribeToAuthPendingChanges())
+    }
   }
 
   private startRealtimeHealthCheck(): void {
@@ -1377,6 +1464,8 @@ export class UserSessionManager {
 
   async disconnectAll() {
     this.shuttingDown = true
+    for (const timer of this.realtimeRetryTimers.values()) clearTimeout(timer)
+    this.realtimeRetryTimers.clear()
     if (this.channelChannel) {
       try { await this.supabase.removeChannel(this.channelChannel) } catch { /* noop */ }
       this.channelChannel = null

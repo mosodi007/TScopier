@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+  @page { size: A4; margin: 22mm 20mm; }
+  * { box-sizing: border-box; }
+  body { font-family: "Helvetica Neue", Arial, sans-serif; color: #1e293b; font-size: 10.5px; line-height: 1.5; margin: 0; }
+  h1 { font-size: 19px; margin: 0 0 2px 0; color: #0f172a; }
+  .subtitle { color: #64748b; font-size: 11px; margin-bottom: 12px; }
+  h2 { font-size: 12.5px; margin: 16px 0 6px 0; padding-bottom: 3px; border-bottom: 2px solid #2563eb; color: #0f172a; }
+  table { border-collapse: collapse; width: 100%; }
+  code { font-family: Menlo, Consolas, monospace; background: #f1f5f9; padding: 1px 4px; border-radius: 3px; font-size: 9.5px; }
+  .meta { width: 100%; margin-bottom: 6px; }
+  .meta td { padding: 4px 8px; vertical-align: top; border: 1px solid #e2e8f0; }
+  .meta .k { color: #64748b; font-weight: bold; width: 90px; text-transform: uppercase; font-size: 8.5px; letter-spacing: 0.5px; }
+  .pill { display: inline-block; padding: 2px 10px; border-radius: 999px; font-weight: bold; font-size: 9.5px; }
+  .pill.red { background: #fee2e2; color: #b91c1c; }
+  .box { border-left: 4px solid #2563eb; background: #eff6ff; padding: 8px 12px; margin: 8px 0; border-radius: 0 4px 4px 0; }
+  .box.green { border-left-color: #16a34a; background: #f0fdf4; }
+  .box.amber { border-left-color: #d97706; background: #fffbeb; }
+  ol, ul { margin: 4px 0 8px 18px; padding: 0; }
+  li { margin-bottom: 4px; }
+  .tbl { margin-top: 4px; }
+  .tbl th { background: #f1f5f9; text-align: left; padding: 4px 8px; border: 1px solid #e2e8f0; font-size: 9.5px; text-transform: uppercase; letter-spacing: 0.4px; color: #475569; }
+  .tbl td { padding: 4px 8px; border: 1px solid #e2e8f0; vertical-align: top; }
+</style>
+</head>
+<body>
+
+<h1>Worker crash on Supabase realtime reconnection (uncaught exception)</h1>
+<div class="subtitle">Incident report &middot; TScopier worker &middot; 2026-08-24</div>
+
+<table class="meta">
+  <tr>
+    <td class="k">Severity</td><td><span style="color:#b91c1c;font-weight:bold;">High</span></td>
+    <td class="k">Status</td><td><span class="pill red">Open — fix proposed</span></td>
+  </tr>
+  <tr>
+    <td class="k">Dates</td><td>Prod crashes Aug 23 23:04, Aug 24 09:17; staging down since Aug 24 13:10 UTC</td>
+    <td class="k">Affected</td><td>All user listeners during each crash window; staging listener still down</td>
+  </tr>
+  <tr>
+    <td class="k">Component</td><td><code>worker/src/sessionManager.ts</code> (realtime subscriptions)</td>
+    <td class="k">Root cause</td><td>Retry reuses an already-subscribed channel object; handler registration throws uncaught</td>
+  </tr>
+</table>
+
+<h2>1. Executive summary (plain English)</h2>
+<div class="box green">
+The worker keeps two background connections to Supabase's realtime service so it learns immediately when a user adds a channel or starts linking Telegram. When one of those connections drops — which happens on ordinary network interruptions or when Supabase restarts its infrastructure — the worker waits five seconds and reconnects. The recovery routine reconnects under the same connection name without discarding the broken connection object first. Supabase returns the old object, and adding message handlers to an already-connected object is not allowed, so the code throws an error nothing catches. Our worker treats any uncaught error as fatal and shuts down. Staging has been down since 13:10 UTC today because Railway did not restart it; production hit the same failure twice in the past day and only survived because its automatic restart policy fired. Every occurrence takes all user listeners offline until the process comes back. The fix is small and confined to the reconnection routine.
+</div>
+
+<h2>2. Issue encountered</h2>
+<ul>
+  <li>Staging listener (deployment <code>ac49e136</code>, commit <code>29cd0ee6</code>) entered <code>CRASHED</code> status at 2026-08-24T13:10:46Z and was not restarted by Railway.</li>
+  <li>Fatal log lines:</li>
+</ul>
+<div class="box">
+<code>[sessionManager] Realtime telegram_channels subscription CHANNEL_ERROR — retrying in 5s</code><br>
+<code>[worker-fatal] UNCAUGHT_EXCEPTION Error: cannot add postgres_changes callbacks for realtime:telegram_channels_changes after subscribe().</code><br>
+The identical error followed for <code>telegram_auth_pending_changes</code> seconds later.
+</div>
+<ul>
+  <li>Production (commit <code>54d82806</code>) logged the same <code>UNCAUGHT_EXCEPTION</code> at 2026-08-23T23:04:46Z and 2026-08-24T09:17:56Z. Railway's ON_FAILURE policy restarted it both times, but each crash disconnected every user listener until restart completed.</li>
+  <li><strong>This is not a new failure.</strong> The retry logic was introduced on 2026-07-28 (<code>5ccf4276</code>, "Realtime subscription reconnect gap fix") and has been crashing the worker on every realtime drop since. The previous production deployment (<code>8b9f88f1</code>) recorded <strong>17 identical crashes between Aug 20 16:05 and Aug 21 20:11</strong>, each silently absorbed by automatic restarts. The defect went unnoticed because production always recovered within minutes and no alerting existed for <code>worker-fatal</code> messages.</li>
+  <li>Both realtime subscriptions (<code>telegram_channels_changes</code>, <code>telegram_auth_pending_changes</code>) contain the same defect and can each trigger the crash independently.</li>
+</ul>
+
+<h2>3. Affected user(s)</h2>
+<table class="tbl">
+  <tr><th>Environment</th><th>Deployment</th><th>When</th><th>Impact</th></tr>
+  <tr><td>Production</td><td><code>7126d9eb</code> (54d82806)</td><td>2026-08-23 23:04:46Z</td><td>All user listeners disconnected until automatic restart</td></tr>
+  <tr><td>Production</td><td><code>7126d9eb</code> (54d82806)</td><td>2026-08-24 09:17:56Z</td><td>Same</td></tr>
+  <tr><td>Staging</td><td><code>ac49e136</code> (29cd0ee6)</td><td>2026-08-24 13:10:46Z</td><td>Listener fully down; not restarted — manual action required</td></tr>
+</table>
+<p>No trades were lost — trade execution runs on a separate service. The impact is signal-listening downtime: signals sent during a crash window are delayed until the worker returns and catches up.</p>
+
+<h2>4. Root cause</h2>
+<div class="box green">
+<strong>In plain English:</strong> The worker holds two standing subscriptions to Supabase's realtime service. When one drops, the recovery code creates a replacement connection using the exact same name as the failed one, but never removes the failed one from the Supabase client first. Supabase identifies connections by name, so instead of a fresh connection it hands back the old, already-connected object. Registering message handlers on an object that is already connected is rejected by the library, and because this all happens inside a timer callback outside any error handling, the error escapes, reaches Node.js, and shuts the process down.
+</div>
+<p><strong>Technical detail:</strong> In <code>worker/src/sessionManager.ts</code>, both <code>subscribeToChannelChanges()</code> (:434) and <code>subscribeToAuthPendingChanges()</code> (:464):</p>
+<ol>
+  <li>On <code>CHANNEL_ERROR</code> or <code>CLOSED</code>, the status callback sets the channel reference to <code>null</code> and schedules resubscription via <code>setTimeout(…, 5000)</code> (:458–459, :487–488).</li>
+  <li>The errored channel is never passed to <code>supabase.removeChannel()</code>, so supabase-js keeps it registered under topic <code>realtime:telegram_channels_changes</code>.</li>
+  <li>On retry, <code>supabase.channel('telegram_channels_changes')</code> deduplicates by topic and returns the existing subscribed instance. Calling <code>.on('postgres_changes', …)</code> on it throws <em>"cannot add 'postgres_changes' callbacks after subscribe()"</em>.</li>
+  <li>The throw occurs inside a <code>setTimeout</code> callback with no try/catch anywhere up the stack &rarr; <code>uncaughtException</code> handler exits the process.</li>
+</ol>
+<p>Trigger condition: any transient realtime disconnect (Supabase platform restart, network blip). Observed frequency: 17 crashes in 28 hours on the previous prod deployment; 2 more on the current one. The defect has existed since 2026-07-28.</p>
+<div class="box">
+<strong>Why it surfaced only now:</strong> it has been occurring continuously since July 28 — production simply recovered automatically each time, and nothing alerted on the crash. The Aug-24 staging event is only the first occurrence that was <em>not</em> auto-recovered, making the pattern visible.
+</div>
+<div class="box amber">
+<strong>Why restarts usually masked it:</strong> the defect lived only in the recovery path of a running process. A restart boots a fresh process with an empty Supabase client registry — no stale channel objects exist, so both subscriptions connect cleanly on first attempt and the worker resumes. Each process then ran fine until its next realtime drop, crashed, and was restarted again: production cycled healthy &rarr; drop &rarr; bad recovery &rarr; crash &rarr; clean restart roughly every 100 minutes during Aug 20&ndash;21. Restarts were an accidental safety net: users saw only brief listening gaps because <code>ON_FAILURE</code> relaunches within seconds. Staging's Aug-24 crash became visible only because the automatic relaunch did not fire (reason not determinable from the Railway API; possibly retry-budget exhaustion or a platform-side issue). Two lasting lessons: uptime figures partly reflected fast crash-restart cycling rather than true stability, and the absence of alerting on <code>worker-fatal</code> let 17 crashes pass unnoticed &mdash; alerting is listed in follow-ups.
+</div>
+<div class="box green">
+<strong>Why this diagnosis is certain:</strong> (1) The error text is emitted verbatim by supabase-js at exactly one place — its guard against registering <code>postgres_changes</code> handlers on a channel that has already been subscribed. (2) The log timing is deterministic: <code>CHANNEL_ERROR</code> at time T, fatal throw at T+5s, precisely the scheduled retry delay. (3) Across two deployments, all 36 recorded <code>CHANNEL_ERROR</code> events are matched 1:1 by an identical <code>UNCAUGHT_EXCEPTION</code> five seconds later; no crash of this class exists without a preceding drop. (4) The retry path is the only code location that re-registers handlers on a channel name that already errored.
+</div>
+
+<h2>5. The fix</h2>
+<p>Confined to <code>worker/src/sessionManager.ts</code>; no behavior change beyond recovery:</p>
+<ol>
+  <li><strong>Remove before retry.</strong> In each error branch, capture the channel reference and call <code>supabase.removeChannel(oldChannel)</code> <em>before</em> nulling the field and scheduling the retry. This guarantees the next attempt receives a fresh channel object.</li>
+  <li><strong>Guard the subscription body.</strong> Wrap the body of both subscribe functions in try/catch, logging a warning and rescheduling on unexpected errors, so no future library change can escalate a recovery attempt into a process exit.</li>
+  <li><strong>Optional hardening.</strong> Include a short random suffix in the channel name per attempt, making name reuse impossible regardless of client-side caching behavior.</li>
+</ol>
+<div class="box amber">
+<strong>Relation to the flood-wait work of 2026-08-21/24:</strong> none. That fix lives in <code>userListener.ts</code> polling logic; this defect predates it and is triggered by Supabase realtime drops, not Telegram throttling. Production crashed from this bug while already running the flood-wait fix, with no flood-wait activity involved at the time.
+</div>
+
+<h2>6. Files changed</h2>
+<p>Not yet implemented. Planned scope:</p>
+<ul>
+  <li><code>worker/src/sessionManager.ts</code> — remove-before-retry in both error branches (:456–459, :485–488); try/catch guards around both subscribe functions.</li>
+  <li>No new unit tests: the failure requires a live socket state transition that cannot be reproduced in unit tests; verification is log-based (section 7).</li>
+</ul>
+
+<h2>7. Verification</h2>
+<ul>
+  <li><code>npm --prefix worker run build</code> (typecheck) and full <code>npm --prefix worker test</code>.</li>
+  <li>Deploy to staging; manually restart the crashed deployment.</li>
+  <li>Confirm in Railway logs that subsequent realtime drops produce a clean removal-and-resubscribe sequence with no <code>UNCAUGHT_EXCEPTION</code>.</li>
+  <li>On production, monitor for realtime <code>CHANNEL_ERROR</code> events over several days; absence of <code>worker-fatal</code> lines following them confirms the fix.</li>
+</ul>
+
+<h2>8. Deployment status</h2>
+<p>Investigation complete 2026-08-24. No code changed yet; nothing deployed. Immediate manual remediation required: redeploy/restart the staging listener. Given production has crashed twice in the past day, this fix should follow the normal path (dev &rarr; staging &rarr; prod) with minimal delay.</p>
+
+<h2>9. Follow-ups</h2>
+<ol>
+  <li>Restart/redeploy the staging listener immediately (manual).</li>
+  <li>Implement the fix in <code>sessionManager.ts</code>, ship dev &rarr; staging, validate, promote to prod promptly.</li>
+  <li>Audit the codebase for other realtime retry loops that may reuse channel references.</li>
+  <li>Consider alerting on <code>worker-fatal UNCAUGHT_EXCEPTION</code> so crashes are noticed without waiting for user reports.</li>
+  <li>Unrelated but noted during the same review: Cerebras parser keys return HTTP 402 repeatedly — check quota/billing separately.</li>
+</ol>
+
+</body>
+</html>

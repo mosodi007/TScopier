@@ -1,8 +1,9 @@
 # Worker Sentry Business Observability
 
-This worker emits two kinds of Sentry signal:
+This worker emits three kinds of Sentry signal:
 
 - Exceptions: uncaught failures, fatal startup/shutdown problems, invariant breaks, and unexpected persistence/reconciliation exceptions.
+- Critical system health: sustained runtime/dependency failures requiring engineering attention, such as FxSocket market-data socket outage or a missing worker heartbeat.
 - Business issues: expected but user-impacting operational outcomes such as skipped copies, broker rejections, disconnected accounts, Telegram recovery exhaustion, failed management operations, ambiguous layering, queue dead letters, and broker-success/database-failure cases.
 
 Sentry complements worker logs and database audit rows. It does not replace `trade_execution_logs`, broker state, reconciliation jobs, or support runbooks.
@@ -14,6 +15,30 @@ Issues (above) are for final failures. In addition, the worker streams **structu
 - Log level gates: `SENTRY_LOGS_MIN_LEVEL=info|warn|error` (default `info`). Set `warn` to cut volume.
 - Every worker process emits one `worker startup` log (`subsystem=worker`, `operation=startup`), proving Sentry connectivity within ~5s of boot.
 - Keep out of log volume just like issues: price ticks, normal queue polling, successful trades/management, normal reconnect heartbeats, and transient retries that later succeed. Prefer a `warn`/`error` log for operator-relevant stage context and reserve issues for final failures.
+
+## Critical System Health
+
+Critical-health issues are emitted through `worker/src/observability/criticalHealth.ts`, which reuses the central Sentry helper, redaction, tags, fingerprints, and fire-and-forget capture behavior in `worker/src/observability/sentry.ts`.
+
+These events answer: "Is a critical TScopier runtime or infrastructure dependency broken?" They are not for explaining one user's trade outcome.
+
+Current critical-health coverage:
+
+- `fx_socket` / `sustained_outage`: the FxSocket WebSocket used for browser/market-data streaming disconnected and stayed unavailable beyond `FXSOCKET_SOCKET_OUTAGE_GRACE_MS` (default `60000`). One worker process emits at most one critical event for an equivalent provider/platform/endpoint outage during the cooldown window; reconnect attempts during the same outage do not create new issues. A successful reconnect resets the socket state so a later sustained outage can alert again after cooldown allows it.
+- Worker-process liveness check-ins: when `SENTRY_WORKER_HEARTBEAT_MONITOR_SLUG` is configured, the worker sends Sentry monitor check-ins every `SENTRY_WORKER_HEARTBEAT_INTERVAL_MS` (default `60000`). Sentry can then report missed check-ins when the worker process is dead, offline, or hard-stalled before it can emit an exception. This is a process-liveness signal; it does not prove the trade or copier pipeline is actively processing work.
+
+Bounded critical-health metadata includes:
+
+- `component`
+- `failure_class`
+- `environment`
+- `severity`
+- `state`
+- `provider`
+- recovery/reconnect attempt fields when useful
+- hashed resource identifiers only, such as `account_id_hash`
+
+Do not add per-trade failures, expected broker rejections, malformed signals, individual account auth failures, or user-level configuration problems to critical health. Those remain business events, admin diagnostics, or logs unless they indicate a global execution outage.
 
 ## Categories
 
@@ -96,6 +121,8 @@ SENTRY_BUSINESS_EVENT_COOLDOWN_MS=300000
 
 Business events still require `SENTRY_ENABLED=true` and a valid `SENTRY_DSN`. Invalid cooldown values fall back to five minutes. Manual-review and fatal events bypass cooldown so ambiguous exposure is not hidden.
 
+Critical-health issue captures use state-transition awareness and bounded, process-local cooldown. Stateful monitors such as FxSocket emit once per sustained outage in the current worker process and reset on recovery. Equivalent events from separate worker processes can still each reach Sentry; the shared Sentry fingerprint groups them into the same issue. Stateless critical-health captures are suppressed inside the process by `SENTRY_CRITICAL_HEALTH_COOLDOWN_MS` (default `300000`) for the same stable key.
+
 ## Redaction
 
 The worker prefers allowlisted context fields and redacts nested data before sending. Do not pass raw database rows, complete Telegram messages, complete signal payloads, complete broker payloads, complete `LayeringPlanSnapshot` JSON, credentials, balances, equity, free margin, request bodies, or response bodies.
@@ -145,6 +172,8 @@ Copier-health business events are emitted only for meaningful user impact:
 
 Temporary reconnects, watchdog probes, lease renewals, and reconnects that succeed within the grace window are not issue events. Offline health alerts are cooldown-limited by stable reason/category, not by user-specific identifiers.
 
+Dead-worker and stalled-process detection is handled by the Sentry worker heartbeat monitor when configured, because a dead process cannot reliably emit its own `copier_engine_offline` event.
+
 Malformed GramJS RPC recovery exhaustion is one underlying Telegram listener incident. Emit `telegram_recovery_exhausted` with reason code `GRAMJS_MALFORMED_RPC_RESULT`; record the failed/offline copier-health transition without also emitting a duplicate `telegram_listener_failed` issue for the same malformed-RPC exhaustion.
 
 Use breadcrumbs for stage context such as signal receipt, parsing, queue consumption, durable claim acquisition, broker request start/response, retry scheduling, reconnect requests, and reconciliation start.
@@ -188,14 +217,23 @@ SENTRY_DSN=<worker project dsn>
 SENTRY_ENVIRONMENT=production
 SENTRY_BUSINESS_EVENTS_ENABLED=true
 SENTRY_BUSINESS_EVENT_COOLDOWN_MS=300000
+SENTRY_CRITICAL_HEALTH_ENABLED=true
+SENTRY_CRITICAL_HEALTH_COOLDOWN_MS=300000
+FXSOCKET_SOCKET_OUTAGE_GRACE_MS=60000
+# Optional Sentry cron/check-in monitor for process-death detection:
+# SENTRY_WORKER_HEARTBEAT_MONITOR_SLUG=tscopier-worker-trade
+# SENTRY_WORKER_HEARTBEAT_INTERVAL_MS=60000
+# SENTRY_WORKER_HEARTBEAT_CHECKIN_MARGIN_MINUTES=2
 ```
 
 Rollback/disable without code changes:
 
 ```env
 SENTRY_BUSINESS_EVENTS_ENABLED=false
+SENTRY_CRITICAL_HEALTH_ENABLED=false
+SENTRY_WORKER_HEARTBEAT_ENABLED=false
 ```
 
 Set `SENTRY_ENABLED=false` to disable all worker Sentry events. Load-test workers remain disabled by default unless `SENTRY_LOAD_TEST_ENABLED=true` is explicitly set for an isolated test project.
 
-Expected volume is low: one event per final/exhausted operational outcome after cooldown, not per success, tick, poll, heartbeat, or normal retry.
+Expected volume is low: one event per final/exhausted operational outcome after cooldown, one event per sustained critical outage, not per success, tick, poll, heartbeat, or normal retry.
