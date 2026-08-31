@@ -59,7 +59,7 @@ The TScopier worker already sends alerts to Sentry when something critical break
   <tr><td>FxSocket / API disconnected for a sustained period</td><td>Yes</td><td><code>FXSOCKET_TEST_FORCE_DISCONNECT</code></td></tr>
   <tr><td>Worker process stops / heartbeat disappears</td><td>Yes</td><td><code>WORKER_HEARTBEAT_TEST_FORCE_STOP</code></td></tr>
   <tr><td>Critical worker / runtime exception</td><td>Yes</td><td><code>CRITICAL_EXCEPTION_TEST_FORCE</code></td></tr>
-  <tr><td>System-wide trade execution failure</td><td>Yes</td><td><code>TRADE_PIPELINE_TEST_FORCE_FAILURE_RATE</code></td></tr>
+  <tr><td>System-wide trade execution failure</td><td>Yes</td><td><code>TRADE_PIPELINE_TEST_FORCE_FAILURE</code></td></tr>
   <tr><td>Cron / background job stopped</td><td>No (planned)</td><td>&mdash;</td></tr>
 </table>
 
@@ -71,14 +71,8 @@ The TScopier worker already sends alerts to Sentry when something critical break
   <tr>
     <td><code>FXSOCKET_TEST_FORCE_DISCONNECT</code></td>
     <td>false</td>
-    <td>Immediately closes the FxSocket WebSocket connection(s) and keeps them down for the configured duration, then reconnects.</td>
-    <td>If down longer than the grace period (default 60s): Critical Issue <code>FXSOCKET_SOCKET_SUSTAINED_OUTAGE</code>. If shorter: no alert.</td>
-  </tr>
-  <tr>
-    <td><code>FXSOCKET_TEST_DISCONNECT_DURATION_MS</code></td>
-    <td>60000</td>
-    <td>How long the FxSocket connection stays down when the disconnect switch is on.</td>
-    <td>Over the grace period &rarr; alert fires; under it &rarr; no alert (short blip).</td>
+    <td>Immediately closes the FxSocket WebSocket connection(s). Socket stays down until the flag is set back to false.</td>
+    <td>After the outage grace (default 60s): Critical Issue <code>FXSOCKET_SOCKET_SUSTAINED_OUTAGE</code>.</td>
   </tr>
   <tr>
     <td><code>WORKER_HEARTBEAT_TEST_FORCE_STOP</code></td>
@@ -89,25 +83,19 @@ The TScopier worker already sends alerts to Sentry when something critical break
   <tr>
     <td><code>CRITICAL_EXCEPTION_TEST_FORCE</code></td>
     <td>false</td>
-    <td>Throws an intentional uncaught exception shortly after startup.</td>
+    <td>Throws an intentional uncaught exception 1 second after startup.</td>
     <td>Error Issue <code>UNCAUGHT_EXCEPTION</code>; heartbeat also stops &rarr; Monitor Down.</td>
   </tr>
   <tr>
-    <td><code>CRITICAL_EXCEPTION_TEST_DELAY_MS</code></td>
-    <td>1000</td>
-    <td>Optional delay before the forced exception fires.</td>
-    <td>&mdash;</td>
-  </tr>
-  <tr>
-    <td><code>TRADE_PIPELINE_TEST_FORCE_FAILURE_RATE</code></td>
-    <td>0</td>
-    <td>Forces N% (0&ndash;100) of trade executions to fail so the trade-pipeline monitor can fire.</td>
+    <td><code>TRADE_PIPELINE_TEST_FORCE_FAILURE</code></td>
+    <td>false</td>
+    <td>Forces all trade executions to fail so the trade-pipeline monitor can fire.</td>
     <td>Critical Issue <code>TRADE_PIPELINE_SYSTEMIC_FAILURE</code> once the failure rate exceeds the threshold over the window.</td>
   </tr>
 </table>
 
 <div class="box green">
-<strong>Trade-pipeline monitor (real monitoring, active in production):</strong> the monitor counts trade successes and failures over a rolling window (<code>TRADE_PIPELINE_WINDOW_MS</code>, default 5 min) and alerts when the failure rate reaches <code>TRADE_PIPELINE_FAILURE_THRESHOLD_PCT</code> (default 50%) after at least <code>TRADE_PIPELINE_MIN_ATTEMPTS</code> (default 10) executions. Only the forced-failure injection is a staging test flag.
+<strong>Trade-pipeline monitor (real monitoring, active in production):</strong> the monitor counts trade successes and failures over a rolling window and alerts when the failure rate reaches <code>TRADE_PIPELINE_FAILURE_THRESHOLD_PCT</code> (default 50%) after at least 10 executions. Only the forced-failure injection is a staging test flag.
 </div>
 
 <div class="box red">
@@ -120,14 +108,9 @@ The TScopier worker already sends alerts to Sentry when something critical break
 <table class="tbl">
   <tr><th>Scenario</th><th>Switch to set</th><th>Expected result</th></tr>
   <tr>
-    <td>FxSocket short disconnect (&lt; grace)</td>
-    <td><code>FXSOCKET_TEST_FORCE_DISCONNECT=true</code><br><code>FXSOCKET_TEST_DISCONNECT_DURATION_MS=30000</code></td>
-    <td>No alert &mdash; grace period absorbs the short blip.</td>
-  </tr>
-  <tr>
-    <td>FxSocket sustained disconnect (&gt; grace)</td>
-    <td><code>FXSOCKET_TEST_FORCE_DISCONNECT=true</code><br><code>FXSOCKET_TEST_DISCONNECT_DURATION_MS=90000</code></td>
-    <td>Critical Issue <code>FXSOCKET_SOCKET_SUSTAINED_OUTAGE</code> fires.</td>
+    <td>FxSocket sustained disconnect</td>
+    <td><code>FXSOCKET_TEST_FORCE_DISCONNECT=true</code></td>
+    <td>Socket stays down. Critical Issue <code>FXSOCKET_SOCKET_SUSTAINED_OUTAGE</code> fires after the grace period (60s).</td>
   </tr>
   <tr>
     <td>Recovery</td>
@@ -151,7 +134,7 @@ The TScopier worker already sends alerts to Sentry when something critical break
   </tr>
   <tr>
     <td>Trade pipeline failure</td>
-    <td><code>TRADE_PIPELINE_TEST_FORCE_FAILURE_RATE=100</code> (and optionally lower <code>TRADE_PIPELINE_MIN_ATTEMPTS</code> / <code>FAILURE_THRESHOLD_PCT</code>)</td>
+    <td><code>TRADE_PIPELINE_TEST_FORCE_FAILURE=true</code></td>
     <td>Critical Issue <code>TRADE_PIPELINE_SYSTEMIC_FAILURE</code> once enough executions fail at/above the threshold within the window.</td>
   </tr>
 </table>

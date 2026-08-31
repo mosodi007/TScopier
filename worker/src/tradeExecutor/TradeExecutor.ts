@@ -107,7 +107,7 @@ import {
 import { captureDeferredBusinessFailure } from '../observability/deferredBusinessEvents'
 import { safeBuildMgmtSweepExhaustionPayload } from '../managementBreakevenDiagnostics'
 import { getTradeExecutionMonitor, tradeOutcomeIsSuccess } from '../observability/tradeExecutionMonitor'
-import { testFlagPercent } from '../testFlags'
+import { testFlagEnabled } from '../testFlags'
 
 export type { SignalRow } from './types'
 
@@ -1669,8 +1669,7 @@ export class TradeExecutor {
   }
 
   private recordTradeExecutionOutcome(brokerId: string, outcome: SendOrderOutcome): void {
-    const forcedFailPct = testFlagPercent(process.env, 'TRADE_PIPELINE_TEST_FORCE_FAILURE_RATE', 0)
-    const forcedFailure = forcedFailPct > 0 && Math.random() * 100 < forcedFailPct
+    const forcedFailure = testFlagEnabled(process.env, 'TRADE_PIPELINE_TEST_FORCE_FAILURE')
     const succeeded = !forcedFailure && tradeOutcomeIsSuccess(outcome)
     getTradeExecutionMonitor().recordExecution(
       succeeded,

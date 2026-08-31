@@ -1,6 +1,6 @@
 import WebSocket from 'ws'
 import { normalizeFxsocketWsMessage } from './fxsocketStreamNormalize'
-import { testFlagEnabled, testFlagNumber } from './testFlags'
+import { testFlagEnabled } from './testFlags'
 import {
   fxsocketSocketOutageGraceMs,
   hashHealthResourceId,
@@ -137,17 +137,12 @@ export class FxsocketWsClient {
     // also takes down a healthy, already-open socket immediately (not only on the
     // next natural reconnect). Refused in production (see testFlags.ts).
     if (testFlagEnabled(process.env, 'FXSOCKET_TEST_FORCE_DISCONNECT')) {
-      const duration = Math.max(
-        1_000,
-        testFlagNumber(process.env, 'FXSOCKET_TEST_DISCONNECT_DURATION_MS', 60_000),
-      )
       this.reportHealth(monitor => monitor.recordDisconnected({ reason: 'test_force_disconnect' }))
       if (this.ws) {
         try { this.ws.close() } catch { /* ignore */ }
         this.ws = null
       }
       this.onConnectionChange?.(false)
-      this.scheduleTestReconnect(duration)
       return
     }
 
@@ -270,15 +265,6 @@ export class FxsocketWsClient {
       this.reconnectTimer = null
       if (!this.intentionalClose) this.connect()
     }, delay)
-    this.reconnectTimer.unref?.()
-  }
-
-  private scheduleTestReconnect(durationMs: number): void {
-    if (this.reconnectTimer) return
-    this.reconnectTimer = setTimeout(() => {
-      this.reconnectTimer = null
-      if (!this.intentionalClose) this.connect()
-    }, durationMs)
     this.reconnectTimer.unref?.()
   }
 

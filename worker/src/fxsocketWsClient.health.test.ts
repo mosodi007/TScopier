@@ -215,7 +215,6 @@ test.afterEach(() => {
   delete process.env.SENTRY_CRITICAL_HEALTH_COOLDOWN_MS
   delete process.env.SENTRY_ENVIRONMENT
   delete process.env.FXSOCKET_TEST_FORCE_DISCONNECT
-  delete process.env.FXSOCKET_TEST_DISCONNECT_DURATION_MS
 })
 
 test('current fx socket sustained outage emits one critical alert through client handlers', () => {
@@ -458,7 +457,6 @@ test('FXSOCKET_TEST_FORCE_DISCONNECT forces the socket down and fires the outage
   const mock = setupSentry()
   process.env.SENTRY_ENVIRONMENT = 'staging'
   process.env.FXSOCKET_TEST_FORCE_DISCONNECT = 'true'
-  process.env.FXSOCKET_TEST_DISCONNECT_DURATION_MS = '60000'
   const scheduler = new FakeScheduler()
   const { FxsocketWsClient } = loadClientModule()
   const client = new FxsocketWsClient({
@@ -476,7 +474,6 @@ test('FXSOCKET_TEST_FORCE_DISCONNECT forces the socket down and fires the outage
   client.close()
   delete process.env.SENTRY_ENVIRONMENT
   delete process.env.FXSOCKET_TEST_FORCE_DISCONNECT
-  delete process.env.FXSOCKET_TEST_DISCONNECT_DURATION_MS
 })
 
 test('FXSOCKET_TEST_FORCE_DISCONNECT takes down an already-open socket immediately', () => {
@@ -497,7 +494,6 @@ test('FXSOCKET_TEST_FORCE_DISCONNECT takes down an already-open socket immediate
   // Now enable the flag and trigger a reconnect — the healthy socket must be torn down.
   process.env.SENTRY_ENVIRONMENT = 'staging'
   process.env.FXSOCKET_TEST_FORCE_DISCONNECT = 'true'
-  process.env.FXSOCKET_TEST_DISCONNECT_DURATION_MS = '60000'
   client.connect()
 
   assert.equal(client.connected, false, 'open socket must be dropped when flag is set')
@@ -506,5 +502,4 @@ test('FXSOCKET_TEST_FORCE_DISCONNECT takes down an already-open socket immediate
   client.close()
   delete process.env.SENTRY_ENVIRONMENT
   delete process.env.FXSOCKET_TEST_FORCE_DISCONNECT
-  delete process.env.FXSOCKET_TEST_DISCONNECT_DURATION_MS
 })

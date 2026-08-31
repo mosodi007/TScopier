@@ -67,10 +67,9 @@ captureWorkerLog('info', 'worker startup', {
 // Refused in production (see testFlags.ts). Remove the flag after the test to
 // avoid crash-looping the worker.
 if (testFlagEnabled(process.env, 'CRITICAL_EXCEPTION_TEST_FORCE')) {
-  const delayMs = Math.max(0, Math.min(60_000, Number(process.env.CRITICAL_EXCEPTION_TEST_DELAY_MS ?? 1000)))
   setTimeout(() => {
     throw new Error('TEST_FORCED_CRITICAL_EXCEPTION')
-  }, delayMs)
+  }, 1000)
 }
 
 if (!globalThis.WebSocket) {

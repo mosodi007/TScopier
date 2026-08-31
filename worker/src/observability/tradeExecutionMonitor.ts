@@ -1,6 +1,5 @@
 import { workerConfig } from '../workerConfig'
 import { captureCriticalHealthIssue, hashHealthResourceId } from './criticalHealth'
-import { testFlagPercent } from '../testFlags'
 
 const DEFAULT_WINDOW_MS = 5 * 60 * 1000
 const DEFAULT_MIN_ATTEMPTS = 10
