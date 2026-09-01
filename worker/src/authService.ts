@@ -79,6 +79,10 @@ const PENDING_DB_PASSWORD_TTL_MS = 20 * 60 * 1000
 const QR_FIRST_TOKEN_WAIT_MS = 15_000
 const QR_PASSWORD_WAIT_MS = 120_000
 export const NO_RESEND_AVAILABLE_ERROR = 'NO_RESEND_AVAILABLE'
+/** Maximum time an authInFlight entry can live before it is considered stale and cleaned up. */
+const AUTH_IN_FLIGHT_TTL_MS = 2 * 60 * 1000
+/** Hard timeout for the entire sendCode / startQrLogin operation (prepareForAuth + client.connect + API call). */
+const AUTH_OPERATION_TIMEOUT_MS = 90 * 1000
 const SENSITIVE_AUTH_LOG_KEY_RE = /(phone_code_hash|phonecodehash|session|string_session|auth_session|auth_key|password|code|token|hash)/i
 const PHONE_AUTH_LOG_KEY_RE = /phone/i
 
@@ -271,6 +275,8 @@ export class AuthService {
   private pending = new Map<string, PendingEntry>()
   /** True from auth start until pending Map entry is ready — blocks listener restart. */
   private authInFlight = new Set<string>()
+  /** Timestamps for authInFlight entries so stale ones can be evicted. */
+  private authInFlightTimestamps = new Map<string, number>()
   private resendInFlight = new Set<string>()
   private qrPasswordResolvers = new Map<string, { resolve: (p: string) => void; reject: (e: Error) => void }>()
   private cleanupTimer: NodeJS.Timeout
@@ -287,7 +293,7 @@ export class AuthService {
     this.invokeTelegram = deps.invoke ?? tgInvoke
     this.now = deps.now ?? Date.now
     this.sessionManager.setAuthGuard(
-      userId => this.pending.has(userId) || this.authInFlight.has(userId) || this.resendInFlight.has(userId),
+      userId => this.pending.has(userId) || this.isAuthInFlight(userId) || this.resendInFlight.has(userId),
     )
     this.cleanupTimer = setInterval(() => {
       this.cleanup()
@@ -318,6 +324,7 @@ export class AuthService {
     await Promise.allSettled(disconnects)
     this.pending.clear()
     this.authInFlight.clear()
+    this.authInFlightTimestamps.clear()
     this.resendInFlight.clear()
     this.qrPasswordResolvers.clear()
   }
@@ -328,6 +335,34 @@ export class AuthService {
     return PENDING_TTL_MS
   }
 
+  /**
+   * Returns true if the user has a live authInFlight entry. If the entry is stale
+   * (older than AUTH_IN_FLIGHT_TTL_MS), it is evicted and this returns false.
+   */
+  private isAuthInFlight(userId: string): boolean {
+    if (!this.authInFlight.has(userId)) return false
+    const createdAt = this.authInFlightTimestamps.get(userId) ?? 0
+    const age = this.now() - createdAt
+    if (age > AUTH_IN_FLIGHT_TTL_MS) {
+      logAuthEvent('auth_in_flight_stale_evict', { userId, ageMs: age })
+      console.warn(`[authService] evicting stale authInFlight entry for user ${userId} (age ${age}ms)`)
+      this.authInFlight.delete(userId)
+      this.authInFlightTimestamps.delete(userId)
+      return false
+    }
+    return true
+  }
+
+  private markAuthInFlight(userId: string): void {
+    this.authInFlight.add(userId)
+    this.authInFlightTimestamps.set(userId, this.now())
+  }
+
+  private clearAuthInFlight(userId: string): void {
+    this.authInFlight.delete(userId)
+    this.authInFlightTimestamps.delete(userId)
+  }
+
   private cleanup() {
     const now = Date.now()
     for (const [userId, p] of this.pending) {
@@ -336,6 +371,14 @@ export class AuthService {
         this.pending.delete(userId)
         this.qrPasswordResolvers.delete(userId)
         console.log(`[authService] expired pending auth for user ${userId}`)
+      }
+    }
+    // Evict stale authInFlight entries that were never cleaned up (e.g. hung promise).
+    for (const [userId, createdAt] of this.authInFlightTimestamps) {
+      if (now - createdAt > AUTH_IN_FLIGHT_TTL_MS) {
+        console.warn(`[authService] cleanup evicting stale authInFlight for user ${userId} (age ${now - createdAt}ms)`)
+        this.authInFlight.delete(userId)
+        this.authInFlightTimestamps.delete(userId)
       }
     }
     void this.supabase
@@ -704,7 +747,7 @@ export class AuthService {
       console.warn(`[authService] send_code invalid phone format user=${userId} phone=${redactAuthLogValue('phone', phone)}`)
       throw new Error('Use full phone with country code, e.g. +44...')
     }
-    if (this.authInFlight.has(userId)) {
+    if (this.isAuthInFlight(userId)) {
       logAuthEvent('send_code_duplicate_in_flight', { userId, correlationId })
       throw new Error('Telegram login is already starting. Wait a few seconds before requesting another code.')
     }
@@ -734,7 +777,7 @@ export class AuthService {
       })
     }
 
-    this.authInFlight.add(userId)
+    this.markAuthInFlight(userId)
     const tStart = Date.now()
     try {
       await this.disconnectPending(userId, 'send_code')
@@ -762,80 +805,98 @@ export class AuthService {
         throw new Error('Could not start Telegram login. Try again in a minute.')
       }
 
-      await this.sessionManager.prepareForAuth(userId)
+      // Wrap prepareForAuth + connect + API call in a hard timeout so a hung
+      // promise (e.g. deadlock in prepareForAuth) does not leave authInFlight
+      // stuck forever.
+      const innerResult = await Promise.race([
+        (async () => {
+          await this.sessionManager.prepareForAuth(userId)
 
-      const client = this.createTelegramClient('')
-      logAuthEvent('send_code_connecting', { userId, correlationId })
-      await client.connect()
-      logAuthEvent('send_code_connected', { userId, correlationId, connectTimeMs: Date.now() - tStart })
+          const client = this.createTelegramClient('')
+          logAuthEvent('send_code_connecting', { userId, correlationId })
+          await client.connect()
+          logAuthEvent('send_code_connected', { userId, correlationId, connectTimeMs: Date.now() - tStart })
 
-      try {
-        const tApi = Date.now()
-        logAuthEvent('send_code_calling_api', { userId, normalizedPhone, correlationId })
-        const result = await this.invokeTelegram<Api.auth.SentCode>(
-          client,
-          new Api.auth.SendCode({
-            phoneNumber: normalizedPhone,
-            apiId: API_ID,
-            apiHash: API_HASH,
-            settings: new Api.CodeSettings({
-              allowFlashcall: false,
-              currentNumber: true,
-              allowAppHash: true,
-              allowMissedCall: false,
-              allowFirebase: false,
-            }),
-          }),
-        )
-        const status = sentCodeStatus(result, this.now())
-        logAuthEvent('send_code_api_ok', {
-          userId, correlationId, apiTimeMs: Date.now() - tApi,
-          responseType: telegramConstructorName(result),
-          delivery: status.delivery,
-          deliveryType: telegramConstructorName(result.type),
-          nextDelivery: status.next_delivery,
-          nextDeliveryType: telegramConstructorName(result.nextType),
-          timeoutPresent: typeof result.timeout === 'number',
-          timeoutSeconds: status.timeoutSeconds,
-          codeLength: status.code_length,
-          canResend: status.can_resend,
-        })
+          try {
+            const tApi = Date.now()
+            logAuthEvent('send_code_calling_api', { userId, normalizedPhone, correlationId })
+            const result = await this.invokeTelegram<Api.auth.SentCode>(
+              client,
+              new Api.auth.SendCode({
+                phoneNumber: normalizedPhone,
+                apiId: API_ID,
+                apiHash: API_HASH,
+                settings: new Api.CodeSettings({
+                  allowFlashcall: false,
+                  currentNumber: true,
+                  allowAppHash: true,
+                  allowMissedCall: false,
+                  allowFirebase: false,
+                }),
+              }),
+            )
+            const status = sentCodeStatus(result, this.now())
+            logAuthEvent('send_code_api_ok', {
+              userId, correlationId, apiTimeMs: Date.now() - tApi,
+              responseType: telegramConstructorName(result),
+              delivery: status.delivery,
+              deliveryType: telegramConstructorName(result.type),
+              nextDelivery: status.next_delivery,
+              nextDeliveryType: telegramConstructorName(result.nextType),
+              timeoutPresent: typeof result.timeout === 'number',
+              timeoutSeconds: status.timeoutSeconds,
+              codeLength: status.code_length,
+              canResend: status.can_resend,
+            })
 
-        const pending: PhonePending = {
-          method: 'phone',
-          client,
-          phone: normalizedPhone,
-          phoneCodeHash: result.phoneCodeHash,
-          delivery: status.delivery,
-          nextDelivery: status.next_delivery ?? null,
-          timeoutSeconds: status.timeoutSeconds,
-          resendAvailableAt: status.resendAvailableAt,
-          canResend: status.canResend,
-          codeLength: status.code_length ?? null,
-          createdAt: this.now(),
-        }
-        this.pending.set(userId, pending)
-        await this.persistPhonePendingRow(userId, pending)
+            const pending: PhonePending = {
+              method: 'phone',
+              client,
+              phone: normalizedPhone,
+              phoneCodeHash: result.phoneCodeHash,
+              delivery: status.delivery,
+              nextDelivery: status.next_delivery ?? null,
+              timeoutSeconds: status.timeoutSeconds,
+              resendAvailableAt: status.resendAvailableAt,
+              canResend: status.canResend,
+              codeLength: status.code_length ?? null,
+              createdAt: this.now(),
+            }
+            this.pending.set(userId, pending)
+            await this.persistPhonePendingRow(userId, pending)
 
-        logAuthEvent('send_code_complete', { userId, correlationId, totalTimeMs: Date.now() - tStart })
-        return pendingCodeStatus(pending, this.now())
-      } catch (err) {
-        const errMsg = err instanceof Error ? err.message : String(err)
-        logAuthEvent('send_code_api_failed', {
-          userId,
-          correlationId,
-          error: errMsg,
-          ...telegramErrorMeta(err),
-          totalTimeMs: Date.now() - tStart,
-        })
-        console.warn(`[authService] send_code Telegram API failed user=${userId}:`, errMsg)
-        try { await client.disconnect() } catch { /* ignore */ }
-        this.pending.delete(userId)
-        await this.clearPendingRow(userId)
-        throw err
+            logAuthEvent('send_code_complete', { userId, correlationId, totalTimeMs: Date.now() - tStart })
+            return pendingCodeStatus(pending, this.now())
+          } catch (err) {
+            const errMsg = err instanceof Error ? err.message : String(err)
+            logAuthEvent('send_code_api_failed', {
+              userId,
+              correlationId,
+              error: errMsg,
+              ...telegramErrorMeta(err),
+              totalTimeMs: Date.now() - tStart,
+            })
+            console.warn(`[authService] send_code Telegram API failed user=${userId}:`, errMsg)
+            try { await client.disconnect() } catch { /* ignore */ }
+            this.pending.delete(userId)
+            await this.clearPendingRow(userId)
+            throw err
+          }
+        })(),
+        new Promise<never>((_, reject) =>
+          setTimeout(() => reject(new Error('AUTH_OPERATION_TIMEOUT')), AUTH_OPERATION_TIMEOUT_MS),
+        ),
+      ])
+      return innerResult
+    } catch (err) {
+      const errMsg = err instanceof Error ? err.message : String(err)
+      if (errMsg === 'AUTH_OPERATION_TIMEOUT') {
+        logAuthEvent('send_code_timeout', { userId, correlationId, totalTimeMs: Date.now() - tStart })
+        console.warn(`[authService] send_code timed out for user ${userId} after ${Date.now() - tStart}ms`)
       }
+      throw err
     } finally {
-      this.authInFlight.delete(userId)
+      this.clearAuthInFlight(userId)
     }
   }
 
@@ -847,7 +908,7 @@ export class AuthService {
       logAuthEvent('resend_code_invalid_phone', { userId, phone, correlationId })
       throw new Error('Use full phone with country code, e.g. +44...')
     }
-    if (this.authInFlight.has(userId)) {
+    if (this.isAuthInFlight(userId)) {
       throw new Error('Telegram login is already starting. Wait a few seconds before requesting another code.')
     }
 
@@ -1050,7 +1111,7 @@ export class AuthService {
       }
     }
 
-    this.authInFlight.add(userId)
+    this.markAuthInFlight(userId)
     const tStart = Date.now()
     try {
       await this.disconnectPending(userId, 'start_qr_login')
@@ -1075,50 +1136,67 @@ export class AuthService {
         throw new Error('Could not start Telegram QR login. Try again in a minute.')
       }
 
-      await this.sessionManager.prepareForAuth(userId)
+      // Wrap prepareForAuth + connect in a hard timeout so a hung promise
+      // does not leave authInFlight stuck forever.
+      const qrResult = await Promise.race<{ qr_url: string; expires_at: string }>([
+        (async (): Promise<{ qr_url: string; expires_at: string }> => {
+          await this.sessionManager.prepareForAuth(userId)
 
-      const client = this.createTelegramClient('')
-      logAuthEvent('qr_login_connecting', { userId, correlationId })
-      await client.connect()
-      logAuthEvent('qr_login_connected', { userId, correlationId, connectTimeMs: Date.now() - tStart })
+          const client = this.createTelegramClient('')
+          logAuthEvent('qr_login_connecting', { userId, correlationId })
+          await client.connect()
+          logAuthEvent('qr_login_connected', { userId, correlationId, connectTimeMs: Date.now() - tStart })
 
-      const pending: QrPending = {
-        method: 'qr',
-        client,
-        latestQrUrl: '',
-        expiresAt: 0,
-        status: 'waiting',
-        createdAt: Date.now(),
-      }
-      this.pending.set(userId, pending)
-      void this.runQrLoginBackground(userId, pending, correlationId)
+          const pending: QrPending = {
+            method: 'qr',
+            client,
+            latestQrUrl: '',
+            expiresAt: 0,
+            status: 'waiting',
+            createdAt: Date.now(),
+          }
+          this.pending.set(userId, pending)
+          void this.runQrLoginBackground(userId, pending, correlationId)
 
-      const deadline = Date.now() + QR_FIRST_TOKEN_WAIT_MS
-      while (!pending.latestQrUrl && Date.now() < deadline) {
-        await sleep(100)
-        if (pending.status === 'error') {
-          logAuthEvent('qr_login_token_error', { userId, correlationId, error: pending.error })
-          console.warn(`[authService] startQrLogin QR error during token wait user=${userId}: ${pending.error}`)
-          throw new Error(pending.error ?? 'Failed to generate QR code')
-        }
-      }
-      if (!pending.latestQrUrl) {
-        logAuthEvent('qr_login_token_timeout', { userId, correlationId, waitMs: QR_FIRST_TOKEN_WAIT_MS })
-        console.warn(`[authService] startQrLogin no QR token within ${QR_FIRST_TOKEN_WAIT_MS}ms user=${userId}`)
-        try { await client.disconnect() } catch { /* ignore */ }
-        this.pending.delete(userId)
-        await this.clearPendingRow(userId)
-        throw new Error('Failed to generate QR code')
-      }
+          const deadline = Date.now() + QR_FIRST_TOKEN_WAIT_MS
+          while (!pending.latestQrUrl && Date.now() < deadline) {
+            await sleep(100)
+            if (pending.status === 'error') {
+              logAuthEvent('qr_login_token_error', { userId, correlationId, error: pending.error })
+              console.warn(`[authService] startQrLogin QR error during token wait user=${userId}: ${pending.error}`)
+              throw new Error(pending.error ?? 'Failed to generate QR code')
+            }
+          }
+          if (!pending.latestQrUrl) {
+            logAuthEvent('qr_login_token_timeout', { userId, correlationId, waitMs: QR_FIRST_TOKEN_WAIT_MS })
+            console.warn(`[authService] startQrLogin no QR token within ${QR_FIRST_TOKEN_WAIT_MS}ms user=${userId}`)
+            try { await client.disconnect() } catch { /* ignore */ }
+            this.pending.delete(userId)
+            await this.clearPendingRow(userId)
+            throw new Error('Failed to generate QR code')
+          }
 
-      logAuthEvent('qr_login_token_ready', { userId, correlationId, expiresAt: new Date(pending.expiresAt).toISOString(), totalTimeMs: Date.now() - tStart })
-      await this.persistQrPendingRow(userId, client, pending)
-      return {
-        qr_url: pending.latestQrUrl,
-        expires_at: new Date(pending.expiresAt).toISOString(),
+          logAuthEvent('qr_login_token_ready', { userId, correlationId, expiresAt: new Date(pending.expiresAt).toISOString(), totalTimeMs: Date.now() - tStart })
+          await this.persistQrPendingRow(userId, client, pending)
+          return {
+            qr_url: pending.latestQrUrl,
+            expires_at: new Date(pending.expiresAt).toISOString(),
+          }
+        })(),
+        new Promise<never>((_, reject) =>
+          setTimeout(() => reject(new Error('AUTH_OPERATION_TIMEOUT')), AUTH_OPERATION_TIMEOUT_MS),
+        ),
+      ])
+      return qrResult
+    } catch (err) {
+      const errMsg = err instanceof Error ? err.message : String(err)
+      if (errMsg === 'AUTH_OPERATION_TIMEOUT') {
+        logAuthEvent('qr_login_timeout', { userId, correlationId, totalTimeMs: Date.now() - tStart })
+        console.warn(`[authService] startQrLogin timed out for user ${userId} after ${Date.now() - tStart}ms`)
       }
+      throw err
     } finally {
-      this.authInFlight.delete(userId)
+      this.clearAuthInFlight(userId)
     }
   }
 
@@ -1138,7 +1216,7 @@ export class AuthService {
       }
       // startQrLogin upserts a placeholder before the in-memory pending exists; polls
       // during prepareForAuth / connect must not surface "QR login expired".
-      if (this.authInFlight.has(userId)) {
+      if (this.isAuthInFlight(userId)) {
         logAuthEvent('qr_status_starting', { userId })
         return { status: 'waiting' }
       }
