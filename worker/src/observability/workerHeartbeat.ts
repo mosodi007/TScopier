@@ -1,5 +1,6 @@
 import { workerConfig } from '../workerConfig'
 import { captureWorkerCheckIn } from './sentry'
+import { testFlagEnabled } from '../testFlags'
 
 const DEFAULT_HEARTBEAT_INTERVAL_MS = 60_000
 const DEFAULT_CHECKIN_MARGIN_MINUTES = 2
@@ -65,7 +66,12 @@ export function workerHeartbeatMonitorConfig(env: NodeJS.ProcessEnv = process.en
   }
 }
 
+function workerHeartbeatTestForceStop(env: NodeJS.ProcessEnv = process.env): boolean {
+  return testFlagEnabled(env, 'WORKER_HEARTBEAT_TEST_FORCE_STOP')
+}
+
 export function captureWorkerHeartbeatCheckIn(env: NodeJS.ProcessEnv = process.env): string | null {
+  if (workerHeartbeatTestForceStop(env)) return null
   const monitorSlug = workerHeartbeatMonitorSlug(env)
   if (!monitorSlug) return null
   return captureWorkerCheckIn({

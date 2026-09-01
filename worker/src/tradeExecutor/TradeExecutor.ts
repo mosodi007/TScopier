@@ -106,6 +106,8 @@ import {
 } from '../copierPause'
 import { captureDeferredBusinessFailure } from '../observability/deferredBusinessEvents'
 import { safeBuildMgmtSweepExhaustionPayload } from '../managementBreakevenDiagnostics'
+import { getTradeExecutionMonitor, tradeOutcomeIsSuccess } from '../observability/tradeExecutionMonitor'
+import { testFlagEnabled } from '../testFlags'
 
 export type { SignalRow } from './types'
 
@@ -1525,15 +1527,21 @@ export class TradeExecutor {
                 const isManual = (effectiveBroker.copier_mode ?? 'ai') === 'manual'
                 const manual = (effectiveBroker.manual_settings ?? {}) as ManualSettings
                 if (isManual && manual.trade_style === 'multi') {
-                  return await runRangeEntry(this, {
+                  return await this.executeAndRecord(
+                    () => runRangeEntry(this, {
+                      signal, parsed, op, broker: effectiveBroker, channelKeywords, pipelineT0,
+                      sendOpts: revisionOnlyOpts,
+                    }),
+                    effectiveBroker.id,
+                  )
+                }
+                return await this.executeAndRecord(
+                  () => runSingleEntry(this, {
                     signal, parsed, op, broker: effectiveBroker, channelKeywords, pipelineT0,
                     sendOpts: revisionOnlyOpts,
-                  })
-                }
-                return await runSingleEntry(this, {
-                  signal, parsed, op, broker: effectiveBroker, channelKeywords, pipelineT0,
-                  sendOpts: revisionOnlyOpts,
-                })
+                  }),
+                  effectiveBroker.id,
+                )
               }
               await new Promise(resolve => setTimeout(resolve, 100))
             }
@@ -1616,18 +1624,58 @@ export class TradeExecutor {
       const isManual = (effectiveBroker.copier_mode ?? 'ai') === 'manual'
       const manual = (effectiveBroker.manual_settings ?? {}) as ManualSettings
       if (isManual && manual.trade_style === 'multi') {
-        return await runRangeEntry(this, {
+        return await this.executeAndRecord(
+          () => runRangeEntry(this, {
+            signal, parsed, op, broker: effectiveBroker, channelKeywords, pipelineT0,
+            sendOpts: effectiveSendOpts,
+          }),
+          effectiveBroker.id,
+        )
+      }
+      return await this.executeAndRecord(
+        () => runSingleEntry(this, {
           signal, parsed, op, broker: effectiveBroker, channelKeywords, pipelineT0,
           sendOpts: effectiveSendOpts,
-        })
-      }
-      return await runSingleEntry(this, {
-        signal, parsed, op, broker: effectiveBroker, channelKeywords, pipelineT0,
-        sendOpts: effectiveSendOpts,
-      })
+        }),
+        effectiveBroker.id,
+      )
     } finally {
       this.entryBrokerInflight.delete(entryKey)
     }
+  }
+
+  /**
+   * Runs a single/range entry execution and records the outcome (or a thrown
+   * exception) to the trade-pipeline monitor, then returns the original outcome
+   * or rethrows. Thrown exceptions are recorded as failures so a systemic
+   * crash-loop outage is visible rather than masking the failure rate.
+   */
+  private async executeAndRecord(
+    run: () => Promise<SendOrderOutcome>,
+    brokerId: string,
+  ): Promise<SendOrderOutcome> {
+    try {
+      const outcome = await run()
+      this.recordTradeExecutionOutcome(brokerId, outcome)
+      return outcome
+    } catch (err) {
+      getTradeExecutionMonitor().recordExecution(
+        false,
+        brokerId,
+        err instanceof Error ? (err.name || 'EXECUTION_ERROR') : 'EXECUTION_ERROR',
+      )
+      throw err
+    }
+  }
+
+  private recordTradeExecutionOutcome(brokerId: string, outcome: SendOrderOutcome): void {
+    const forcedFailure = testFlagEnabled(process.env, 'TRADE_PIPELINE_TEST_FORCE_FAILURE')
+    const succeeded = !forcedFailure && tradeOutcomeIsSuccess(outcome)
+    getTradeExecutionMonitor().recordExecution(
+      succeeded,
+      brokerId,
+      forcedFailure ? 'TEST_FORCED_TRADE_FAILURE' : outcome.failureReason,
+    )
   }
 
   async logSendSkipped(signal: SignalRow,
