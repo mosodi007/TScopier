@@ -203,7 +203,7 @@ Deno.serve(async (req: Request) => {
         <p style="margin:0;font-size:14px;line-height:1.6;color:#737373;">Your approval window is <strong>2 minutes</strong> from when the signal was received. After that, the signal is skipped automatically. You can still view it in the Trades tab.</p>
       `,
       buttonLabel: "Review signal",
-      buttonUrl: `${APP_URL}/account-trades`,
+      buttonUrl: `${APP_URL}/account-trades?review=${signal_id}`,
       footerNote: "You can turn off these emails in Settings → Notifications.",
       logoUrl: LOGO_URL,
     })

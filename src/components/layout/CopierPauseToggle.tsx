@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { Link } from 'react-router-dom'
 import { createPortal } from 'react-dom'
 import { Pause, Play } from 'lucide-react'
 import clsx from 'clsx'
@@ -36,6 +37,7 @@ export function CopierPauseToggle({ className }: CopierPauseToggleProps) {
   )
 
   const lockedStopped = copierStartBlocked && !startBlockedResolving
+  const needsSetup = lockedStopped && copierStartBlockedReason === 'setup'
   const showStopped = lockedStopped || copierPaused
   const stoppedHint = lockedStopped
     ? (copierStartBlockedReason === 'subscription'
@@ -153,8 +155,25 @@ export function CopierPauseToggle({ className }: CopierPauseToggleProps) {
     </div>
   ) : null
 
+  const setupLink = needsSetup ? (
+    <Link
+      to="/brokers"
+      aria-label={`${cp.statusCopierStopped ?? 'Copier Stopped'}. ${stoppedHint}`}
+      title={stoppedHint}
+      className={clsx(
+        'group flex items-center gap-1.5 rounded-lg px-2 py-1.5 text-xs font-medium transition-colors sm:gap-2 sm:px-2.5 sm:text-sm',
+        'text-amber-700 bg-amber-50 hover:bg-amber-100 dark:text-amber-300 dark:bg-amber-950/40 dark:hover:bg-amber-950/60',
+        className,
+      )}
+    >
+      <CopierStoppedIndicator />
+      <span className="whitespace-nowrap">Fix setup</span>
+    </Link>
+  ) : null
+
   return (
     <>
+      {setupLink ?? (
       <button
         type="button"
         onClick={handleButtonClick}
@@ -202,6 +221,7 @@ export function CopierPauseToggle({ className }: CopierPauseToggleProps) {
           </>
         )}
       </button>
+      )}
 
       {confirmModal ? createPortal(confirmModal, document.body) : null}
     </>
