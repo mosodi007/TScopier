@@ -4,6 +4,15 @@ Changelog entries authored by Emma, kept separate from the main PROJECT_MEMORY.m
 
 ## Changelog
 
+### 2026-09-03 - Stefan Reply-Linked Management Basket Scoping
+
+- **Stefan independent-entry staging PASS:** Staging confirmed the original Stefan multi-signal fix: Signal A opened its own XAUUSD BUY basket, and a second complete XAUUSD BUY opened as independent Basket B instead of refreshing Basket A.
+- **Reply-linked management regression:** A Telegram reply to Signal A saying `Move SL to breakeven` affected positions from both Basket A and Basket B. That regression is separate from the independent-entry fix and only concerns explicit reply-linked management scoping.
+- **Root cause:** `applyManagement(...)` detected reply-scoped management but still loaded open trades through the channel-wide management loaders. With two same-channel XAUUSD BUY baskets open, breakeven eligibility included both baskets, so `OrderModify` moved SL on both baskets; any later broker closure would be caused by those SL modifications, not by a new entry merge.
+- **Corrected fix:** Explicit Telegram reply/parent management now resolves the replied parent to an open basket anchor and loads trades by that `signal_id` across brokers. Unthreaded management keeps the existing channel/symbol fallback. Reply-scoped close cleanup and channel-active-params persistence no longer widen an explicit target back to the whole channel.
+- **Regression coverage:** Added an executor-level test with Basket A and Basket B open, then a breakeven reply to Signal A. The test asserts only Basket A tickets are modified, Basket B is untouched, no new basket is created, reply to Signal B targets Basket B, and existing single-basket management still works.
+- **Staging retest pending:** No push, deploy, or live broker retest was performed after this local fix. Staging still needs a manual Telegram reply retest confirming reply-to-A manages Basket A only and Basket B remains untouched.
+
 ### 2026-09-02 - Stefan Live Multi-Signal Basket Refresh Correction
 
 - **Previous fixture gap:** The earlier Stefan regression passed with the deterministic parser shape for the second complete GOLD BUY setup. That fixture had top-level `entry_zone_low` / `entry_zone_high`, so `shouldRouteAsBasketParameterRefresh(...)` rejected the message before the modify-only basket refresh path could reproduce the live failure.
