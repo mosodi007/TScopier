@@ -5,6 +5,7 @@ import { isChannelSlTpUpdateBlocked, normalizeChannelMessageFiltersMap } from '.
 import {
   parsedHasExplicitEntryAnchor,
   signalEntryPriceStrictEnabled,
+  signalEntryRangeStrictEnabled,
   type ChannelKeywords,
   type ManualSettings
 } from '../../manualPlanner'
@@ -20,6 +21,7 @@ import { MERGE_IMPLICIT_CHANNEL_BUNDLE_MS, messageRevisionBypassesMergeLinking }
 import { messageHasMarketNowIntent } from '../../signalEntryNowRequirement'
 import { entryDispatchLooksSettleable } from '../../signalRevision'
 import { parsedHasReEnterIntent } from '../../signalPriceInference'
+import type { BasketMergeLinkContext } from '../../signalMergeLink'
 import { type TradeExecutorContext } from '../context'
 import {
   type BrokerRow,
@@ -28,6 +30,7 @@ import {
   type SignalRow,
   type SymbolCacheEntry
 } from '../types'
+import { stefanDebug } from '../stefanDebug'
 import { reconcileGhostBasketLegs, loadMergeSignalForLinking, resolveBasketMergeLinkContext } from './helpers'
 import { applyBasketSlTpRefresh } from './slTpRefresh'
 
@@ -37,6 +40,62 @@ export function revisionRefreshSafeSkipOutcome(): MergeOutcome {
 
 export function revisionRefreshWithoutOpenBasketOutcome(sameSignalRefresh: boolean): MergeOutcome {
   return sameSignalRefresh ? revisionRefreshSafeSkipOutcome() : { handled: false }
+}
+
+function rawInstructionHasExplicitEntryAnchor(raw: unknown): boolean {
+  const text = String(raw ?? '')
+  if (!text.trim()) return false
+  return text
+    .split(/\r?\n/)
+    .map(line => line.trim())
+    .some(line => {
+      if (!line) return false
+      if (/\b(?:sl|s\/l|stop\s*loss|tp\d*|take\s*profit|target)\b/i.test(line)) return false
+      if (!/\d{2,}(?:\.\d+)?/.test(line)) return false
+      return (
+        /\b(?:buy|sell)\s+zone\b/i.test(line)
+        || /\bentry(?:\s+(?:zone|price|point))?\b/i.test(line)
+        || /\bzone\b/i.test(line)
+        || /\b(?:buy|sell)\b.*\d{2,}(?:\.\d+)?\s*(?:-|\/|to)\s*\d{1,}(?:\.\d+)?/i.test(line)
+      )
+    })
+}
+
+function positivePrice(v: unknown): number | null {
+  const n = typeof v === 'number' ? v : Number(v)
+  return Number.isFinite(n) && n > 0 ? n : null
+}
+
+function storedIntent(parsed: ParsedSignal): { kind?: unknown; entry?: unknown; flags?: { market_now?: unknown } } | undefined {
+  return (parsed as unknown as {
+    _intent?: { kind?: unknown; entry?: unknown; flags?: { market_now?: unknown } }
+  })._intent
+}
+
+function storedIntentHasExplicitEntryAnchor(parsed: ParsedSignal): boolean {
+  const intent = storedIntent(parsed)
+  if (String(intent?.kind ?? '').toLowerCase() !== 'entry') return false
+  const entry = intent?.entry
+  if (!Array.isArray(entry)) return false
+  return entry.some(v => positivePrice(v) != null)
+}
+
+function storedIntentHasMarketNow(parsed: ParsedSignal): boolean {
+  return storedIntent(parsed)?.flags?.market_now === true
+}
+
+export function isUnlinkedCompleteEntryMerge(parsed: ParsedSignal, link: BasketMergeLinkContext): boolean {
+  if (!parsedSignalHasExplicitStops(parsed)) return false
+  if (
+    !parsedHasExplicitEntryAnchor(parsed)
+    && !storedIntentHasExplicitEntryAnchor(parsed)
+    && !rawInstructionHasExplicitEntryAnchor(parsed.raw_instruction)
+  ) return false
+  if (messageHasMarketNowIntent(String(parsed.raw_instruction ?? '')) || storedIntentHasMarketNow(parsed)) return false
+  return !link.replyOk
+    && !link.threadLinksAnchor
+    && !link.parentLinksAnchor
+    && !link.sameSignalRefresh
 }
 
 export async function tryParameterFollowUpMergeModifyOnly(ctx: TradeExecutorContext, args: {
@@ -58,6 +117,17 @@ export async function tryParameterFollowUpMergeModifyOnly(ctx: TradeExecutorCont
       strictEntryPrefetch, commentPrefix,
     } = args
     const sameSignalRefresh = args.sameSignalRefresh === true
+    const manual = (broker.manual_settings ?? {}) as ManualSettings
+    stefanDebug('try_parameter_follow_up_entry', {
+      signal,
+      parsed,
+      symbol,
+      direction: parsed.action ?? null,
+      finalRoutingDecision: 'BASKET_REFRESH',
+      quote: strictEntryPrefetch,
+      rangeTrading: manual.range_trading === true,
+      strictRange: signalEntryRangeStrictEnabled(manual),
+    })
     const revisionSafeSkip = (): MergeOutcome => revisionRefreshSafeSkipOutcome()
     if (!hasFxsocketConfigured()) return sameSignalRefresh ? revisionSafeSkip() : { handled: false }
     if (parsedHasReEnterIntent(parsed)) return sameSignalRefresh ? revisionSafeSkip() : { handled: false }
@@ -155,10 +225,29 @@ export async function tryParameterFollowUpMergeModifyOnly(ctx: TradeExecutorCont
       newestTradeOpenedAt: anchor.newestOpenedAt,
       parsed,
     })
+    const unlinkedCompleteEntryMerge = isUnlinkedCompleteEntryMerge(parsed, link)
+    stefanDebug('before_is_unlinked_complete_entry_merge_parameter_follow_up', {
+      signal,
+      parsed,
+      symbol,
+      direction,
+      link,
+      guardResult: unlinkedCompleteEntryMerge,
+      finalRoutingDecision: unlinkedCompleteEntryMerge ? 'NEW_ENTRY' : 'BASKET_REFRESH',
+      quote: strictEntryPrefetch,
+      rangeTrading: manual.range_trading === true,
+      strictRange: signalEntryRangeStrictEnabled(manual),
+    })
+    if (!sameSignalRefresh && unlinkedCompleteEntryMerge) {
+      console.warn(
+        `[tradeExecutor] modify-only merge skipped for unlinked complete entry signal=${signal.id}`
+        + ` broker=${broker.id} symbol=${symbol} direction=${direction}`,
+      )
+      return { handled: false }
+    }
     // Parameter follow-up (modify-only) must be explicitly linked by reply/thread/parent.
     // Exception: when add_new_trades_to_existing=false, the strategy is "single slot";
     // a same-direction signal carrying explicit stops should refresh that live slot.
-    const manual = (broker.manual_settings ?? {}) as ManualSettings
     const sameSignalRevision =
       sameSignalRefresh && anchor.anchorSignalId === signal.id
     const revisionBypassLinking = messageRevisionBypassesMergeLinking({
@@ -260,6 +349,19 @@ export async function tryParameterFollowUpMergeModifyOnly(ctx: TradeExecutorCont
       return { handled: false }
     }
 
+    stefanDebug('before_apply_basket_sltp_refresh_parameter_follow_up', {
+      signal,
+      parsed,
+      symbol,
+      direction,
+      link,
+      guardResult: unlinkedCompleteEntryMerge,
+      finalRoutingDecision: 'BASKET_REFRESH',
+      quote: strictEntryPrefetch,
+      rangeTrading: manual.range_trading === true,
+      strictRange: signalEntryRangeStrictEnabled(manual),
+    })
+
     const outcome = await applyBasketSlTpRefresh(ctx, {
       signal,
       parsed,
@@ -307,7 +409,7 @@ export async function tryMergeSignalIntoExistingOpenTrade(ctx: TradeExecutorCont
     commentPrefix: string
   }): Promise<MergeOutcome> {
     const {
-      signal, parsed, op, broker, channelKeywords, baseLot, params, symbol, uuid,
+      signal, parsed, broker, channelKeywords, baseLot, params, symbol, uuid,
       strictEntryPrefetch, commentPrefix,
     } = args
     if (!hasFxsocketConfigured()) return { handled: false }
@@ -378,6 +480,26 @@ export async function tryMergeSignalIntoExistingOpenTrade(ctx: TradeExecutorCont
       newestTradeOpenedAt: newest.opened_at,
       parsed,
     })
+    const unlinkedCompleteEntryMerge = isUnlinkedCompleteEntryMerge(parsed, link)
+    stefanDebug('before_is_unlinked_complete_entry_merge_stack', {
+      signal,
+      parsed,
+      symbol,
+      direction,
+      link,
+      guardResult: unlinkedCompleteEntryMerge,
+      finalRoutingDecision: unlinkedCompleteEntryMerge ? 'NEW_ENTRY' : 'BASKET_REFRESH',
+      quote: strictEntryPrefetch,
+      rangeTrading: manual.range_trading === true,
+      strictRange: signalEntryRangeStrictEnabled(manual),
+    })
+    if (unlinkedCompleteEntryMerge) {
+      console.warn(
+        `[tradeExecutor] merge skipped for unlinked complete entry signal=${signal.id}`
+        + ` broker=${broker.id} symbol=${symbol} direction=${direction}`,
+      )
+      return { handled: false }
+    }
     if (!link.isLinked) {
       console.warn(
         `[tradeExecutor] merge not linked signal=${signal.id} broker=${broker.id} symbol=${symbol}`
@@ -388,6 +510,18 @@ export async function tryMergeSignalIntoExistingOpenTrade(ctx: TradeExecutorCont
       return { handled: false }
     }
 
+    stefanDebug('before_apply_basket_sltp_refresh_stack', {
+      signal,
+      parsed,
+      symbol,
+      direction,
+      link,
+      guardResult: unlinkedCompleteEntryMerge,
+      finalRoutingDecision: 'BASKET_REFRESH',
+      quote: strictEntryPrefetch,
+      rangeTrading: manual.range_trading === true,
+      strictRange: signalEntryRangeStrictEnabled(manual),
+    })
     const refresh = await applyBasketSlTpRefresh(ctx, {
       signal,
       parsed,
@@ -439,6 +573,7 @@ export async function tryTeaserCompletionMerge(ctx: TradeExecutorContext, args: 
       signal, parsed, broker, channelKeywords, baseLot, params, symbol, uuid,
       strictEntryPrefetch, commentPrefix,
     } = args
+    const manual = (broker.manual_settings ?? {}) as ManualSettings
     if (!hasFxsocketConfigured()) return { handled: false }
     if (!parsedSignalHasExplicitStops(parsed)) return { handled: false }
     if (!messageHasMarketNowIntent(String(parsed.raw_instruction ?? ''))) return { handled: false }
@@ -527,6 +662,18 @@ export async function tryTeaserCompletionMerge(ctx: TradeExecutorContext, args: 
       + ` symbol=${symbol} direction=${direction}`,
     )
 
+
+    stefanDebug('before_apply_basket_sltp_refresh_teaser_completion', {
+      signal,
+      parsed,
+      symbol,
+      direction,
+      link,
+      finalRoutingDecision: 'BASKET_REFRESH',
+      quote: strictEntryPrefetch,
+      rangeTrading: manual.range_trading === true,
+      strictRange: signalEntryRangeStrictEnabled(manual),
+    })
     const outcome = await applyBasketSlTpRefresh(ctx, {
       signal,
       parsed,

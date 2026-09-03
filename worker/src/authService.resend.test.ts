@@ -1,4 +1,4 @@
-import { describe, it } from 'node:test'
+import { afterEach, describe, it } from 'node:test'
 import assert from 'node:assert/strict'
 import { Api } from 'telegram/tl'
 import {
@@ -12,6 +12,20 @@ type UpsertCall = {
   table: string
   payload: Record<string, unknown>
 }
+
+const authServices = new Set<AuthService>()
+
+function authService(...args: ConstructorParameters<typeof AuthService>): AuthService {
+  const service = new AuthService(...args)
+  authServices.add(service)
+  return service
+}
+
+afterEach(async () => {
+  const services = [...authServices]
+  authServices.clear()
+  await Promise.all(services.map(service => service.shutdown()))
+})
 
 function fakeSupabase(upserts: UpsertCall[] = []) {
   return {
@@ -33,9 +47,13 @@ function fakeSupabase(upserts: UpsertCall[] = []) {
           return Promise.resolve({ error: null })
         },
         delete() {
+          const result = Promise.resolve({ error: null })
           return {
             eq() {
-              return Promise.resolve({ error: null })
+              return result
+            },
+            lt() {
+              return result
             },
           }
         },
@@ -102,7 +120,7 @@ describe('AuthService resendCode', () => {
 
   it('does not call Telegram before the returned timeout expires', async () => {
     let invokeCount = 0
-    const service = new AuthService(
+    const service = authService(
       fakeSupabase() as never,
       fakeSessionManager() as never,
       {
@@ -137,7 +155,7 @@ describe('AuthService resendCode', () => {
   it('uses auth.ResendCode with the existing hash and replaces it with the returned hash', async () => {
     const upserts: UpsertCall[] = []
     const requests: unknown[] = []
-    const service = new AuthService(
+    const service = authService(
       fakeSupabase(upserts) as never,
       fakeSessionManager() as never,
       {
@@ -185,7 +203,7 @@ describe('AuthService resendCode', () => {
 
   it('refuses resend locally when Telegram did not offer a resend path', async () => {
     let invokeCount = 0
-    const service = new AuthService(
+    const service = authService(
       fakeSupabase() as never,
       fakeSessionManager() as never,
       {
@@ -221,7 +239,7 @@ describe('AuthService resendCode', () => {
 
   it('sendCode uses CodeSettings that allow Telegram-app delivery', async () => {
     const requests: unknown[] = []
-    const service = new AuthService(
+    const service = authService(
       fakeSupabase() as never,
       fakeSessionManager() as never,
       {
@@ -255,7 +273,7 @@ describe('AuthService resendCode', () => {
 
   it('sendCode debounces a second click within 15s without calling Telegram again', async () => {
     const requests: unknown[] = []
-    const service = new AuthService(
+    const service = authService(
       fakeSupabase() as never,
       fakeSessionManager() as never,
       {
@@ -281,7 +299,7 @@ describe('AuthService resendCode', () => {
   it('sendCode requests a new Telegram code after the debounce window', async () => {
     let now = 100_000
     const requests: unknown[] = []
-    const service = new AuthService(
+    const service = authService(
       fakeSupabase() as never,
       fakeSessionManager() as never,
       {
@@ -307,7 +325,7 @@ describe('AuthService resendCode', () => {
 
   it('verifyCode uses the latest hash after resend replaces the old hash', async () => {
     const signInRequests: unknown[] = []
-    const service = new AuthService(
+    const service = authService(
       fakeSupabase() as never,
       fakeSessionManager() as never,
       {

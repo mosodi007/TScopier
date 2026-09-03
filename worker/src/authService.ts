@@ -83,6 +83,18 @@ export const NO_RESEND_AVAILABLE_ERROR = 'NO_RESEND_AVAILABLE'
 const AUTH_IN_FLIGHT_TTL_MS = 2 * 60 * 1000
 /** Hard timeout for the entire sendCode / startQrLogin operation (prepareForAuth + client.connect + API call). */
 const AUTH_OPERATION_TIMEOUT_MS = 90 * 1000
+
+function withAuthOperationTimeout<T>(operation: Promise<T>): Promise<T> {
+  let timeout: ReturnType<typeof setTimeout> | undefined
+  const timeoutPromise = new Promise<never>((_, reject) => {
+    timeout = setTimeout(() => reject(new Error('AUTH_OPERATION_TIMEOUT')), AUTH_OPERATION_TIMEOUT_MS)
+    if (typeof timeout.unref === 'function') timeout.unref()
+  })
+  return Promise.race([operation, timeoutPromise]).finally(() => {
+    if (timeout) clearTimeout(timeout)
+  })
+}
+
 const SENSITIVE_AUTH_LOG_KEY_RE = /(phone_code_hash|phonecodehash|session|string_session|auth_session|auth_key|password|code|token|hash)/i
 const PHONE_AUTH_LOG_KEY_RE = /phone/i
 
@@ -808,8 +820,7 @@ export class AuthService {
       // Wrap prepareForAuth + connect + API call in a hard timeout so a hung
       // promise (e.g. deadlock in prepareForAuth) does not leave authInFlight
       // stuck forever.
-      const innerResult = await Promise.race([
-        (async () => {
+      const innerResult = await withAuthOperationTimeout((async () => {
           await this.sessionManager.prepareForAuth(userId)
 
           const client = this.createTelegramClient('')
@@ -882,11 +893,7 @@ export class AuthService {
             await this.clearPendingRow(userId)
             throw err
           }
-        })(),
-        new Promise<never>((_, reject) =>
-          setTimeout(() => reject(new Error('AUTH_OPERATION_TIMEOUT')), AUTH_OPERATION_TIMEOUT_MS),
-        ),
-      ])
+        })())
       return innerResult
     } catch (err) {
       const errMsg = err instanceof Error ? err.message : String(err)
@@ -1138,8 +1145,7 @@ export class AuthService {
 
       // Wrap prepareForAuth + connect in a hard timeout so a hung promise
       // does not leave authInFlight stuck forever.
-      const qrResult = await Promise.race<{ qr_url: string; expires_at: string }>([
-        (async (): Promise<{ qr_url: string; expires_at: string }> => {
+      const qrResult = await withAuthOperationTimeout((async (): Promise<{ qr_url: string; expires_at: string }> => {
           await this.sessionManager.prepareForAuth(userId)
 
           const client = this.createTelegramClient('')
@@ -1182,11 +1188,7 @@ export class AuthService {
             qr_url: pending.latestQrUrl,
             expires_at: new Date(pending.expiresAt).toISOString(),
           }
-        })(),
-        new Promise<never>((_, reject) =>
-          setTimeout(() => reject(new Error('AUTH_OPERATION_TIMEOUT')), AUTH_OPERATION_TIMEOUT_MS),
-        ),
-      ])
+        })())
       return qrResult
     } catch (err) {
       const errMsg = err instanceof Error ? err.message : String(err)
