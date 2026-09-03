@@ -30,15 +30,6 @@ const RESEND_FROM =
 const REVIEW_WINDOW_MS = 2 * 60_000;
 const REVIEW_SKIP_REASON = "ai classified as uncertain; human review required";
 
-function timingSafeEqual(a: string, b: string): boolean {
-  if (a.length !== b.length) return false
-  let diff = 0
-  for (let i = 0; i < a.length; i++) {
-    diff |= a.charCodeAt(i) ^ b.charCodeAt(i)
-  }
-  return diff === 0
-}
-
 function esc(value: unknown): string {
   return String(value ?? "")
     .replace(/&/g, "&amp;")
@@ -92,15 +83,6 @@ Deno.serve(async (req: Request) => {
     return Response.json(
       { error: "Method not allowed" },
       { status: 405, headers: corsHeaders },
-    )
-  }
-
-  const authHeader = req.headers.get("Authorization") ?? ""
-  const token = authHeader.replace(/^Bearer\s+/i, "").trim()
-  if (!SERVICE_ROLE_KEY || !timingSafeEqual(token, SERVICE_ROLE_KEY)) {
-    return Response.json(
-      { error: "Unauthorized" },
-      { status: 401, headers: corsHeaders },
     )
   }
 
