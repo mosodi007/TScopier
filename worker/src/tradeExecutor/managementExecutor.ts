@@ -44,6 +44,7 @@ import {
   isReplyScopedManagement,
   loadOpenTradesForChannelWideCwe,
   loadOpenTradesForManagement,
+  loadOpenTradesForSignalAcrossBrokers,
   resolveChannelModifyTargets,
   type MgmtTradeRow
 } from '../managementScope'
@@ -536,11 +537,9 @@ export async function applyManagement(
     let mgmtSymbolHint: string | null = symbolFromText
     let modifyApplyResult: ChannelStopApplyResult | null = null
 
-    // Every management instruction is channel-scoped: it applies to every open basket on
-    // the channel for the relevant symbol across ALL brokers, even when posted as a reply
-    // to one entry (channels broadcast basket-wide close / breakeven / SL changes as
-    // replies). The symbol is inherited from the replied/parent entry so an instruction
-    // never crosses to an unrelated symbol (e.g. a gold close must not touch USDCAD).
+    // Unlinked management remains channel-scoped. When Telegram gives us an
+    // explicit replied parent, keep management anchored to that basket instead
+    // of widening back to every same-symbol basket on the channel.
     if (!signal.channel_id) {
       await skipMgmtSignalWithLog(ctx, signal, 'mgmt_no_open_trades_db', { scope: 'no_channel' })
       return emptyMgmtResult(legConcurrency)
@@ -658,29 +657,58 @@ export async function applyManagement(
         mgmtSymbolHint = parentSym
       }
     }
-    let channelRows = actionPre === 'close_worse_entries'
-      ? await loadOpenTradesForChannelWideCwe(ctx.supabase, {
+    const explicitParentSignalId = replyScoped
+      ? String(signal.parent_signal_id ?? '').trim()
+      : ''
+    const hasExplicitMgmtParent = explicitParentSignalId.length > 0
+    const explicitBasketAnchorId = hasExplicitMgmtParent
+      ? await ctx.resolveBasketAnchorSignalIdForOpenTrades({
+        userId: signal.user_id,
+        brokerAccountIds,
+        channelId: signal.channel_id,
+        parentSignalId: explicitParentSignalId,
+        symbolHint: scopeSymbolFilter ?? symbolFromText,
+      })
+      : null
+    let channelRows: MgmtTradeRow[] = []
+    if (hasExplicitMgmtParent) {
+      const scoped = explicitBasketAnchorId
+        ? await loadOpenTradesForSignalAcrossBrokers(ctx.supabase, {
+          userId: signal.user_id,
+          signalId: explicitBasketAnchorId,
+          brokerAccountIds,
+        })
+        : null
+      channelRows = scoped?.rows ?? []
+      if (scopeSymbolFilter) {
+        channelRows = channelRows.filter(row => symbolsCompatibleForBasket(scopeSymbolFilter, row.symbol))
+      }
+    } else if (actionPre === 'close_worse_entries') {
+      channelRows = await loadOpenTradesForChannelWideCwe(ctx.supabase, {
         userId: signal.user_id,
         channelId: signal.channel_id,
         brokerAccountIds,
         symbolFilter: scopeSymbolFilter,
       })
-      : mgmtUseChannelStopApply() && actionPre === 'modify'
-        ? await ensureChannelModifyScope(ctx.supabase, {
-          userId: signal.user_id,
-          channelId: signal.channel_id,
-          brokerAccountIds,
-          symbolFilter: scopeSymbolFilter,
-        })
-        : await loadOpenTradesForManagement(ctx.supabase, {
-          userId: signal.user_id,
-          channelId: signal.channel_id,
-          brokerAccountIds,
-          symbolFilter: scopeSymbolFilter,
-        })
+    } else if (mgmtUseChannelStopApply() && actionPre === 'modify') {
+      channelRows = await ensureChannelModifyScope(ctx.supabase, {
+        userId: signal.user_id,
+        channelId: signal.channel_id,
+        brokerAccountIds,
+        symbolFilter: scopeSymbolFilter,
+      })
+    } else {
+      channelRows = await loadOpenTradesForManagement(ctx.supabase, {
+        userId: signal.user_id,
+        channelId: signal.channel_id,
+        brokerAccountIds,
+        symbolFilter: scopeSymbolFilter,
+      })
+    }
     if (
       actionPre === 'modify'
       && !scopeSymbolFilter
+      && !hasExplicitMgmtParent
       && channelRows.length > 0
     ) {
       channelRows = mgmtUseChannelStopApply()
@@ -688,7 +716,7 @@ export async function applyManagement(
         : resolveChannelModifyTargets(channelRows, parsed)
     }
     let rows: MgmtTradeRow[] = channelRows
-    let basketAnchorId: string | null = rows[0]?.signal_id ?? null
+    let basketAnchorId: string | null = explicitBasketAnchorId ?? rows[0]?.signal_id ?? null
 
     const byBroker = new Map(brokers.map(b => [b.id, b]))
     const action = String(parsed.action).toLowerCase()
@@ -717,6 +745,7 @@ export async function applyManagement(
       action === 'close_worse_entries'
       && !rows.length
       && signal.channel_id
+      && !hasExplicitMgmtParent
     ) {
       rows = await loadOpenTradesForChannelWideCwe(ctx.supabase, {
         userId: signal.user_id,
@@ -845,7 +874,7 @@ export async function applyManagement(
     }
 
     if (!rows.length && !pendingLegs.length) {
-      if (action === 'close' && signal.channel_id) {
+      if (action === 'close' && signal.channel_id && !hasExplicitMgmtParent) {
         const channelMeta = await ctx.getChannelMeta(signal.channel_id)
         let brokerClosed = 0
         await Promise.allSettled(brokers.map(async broker => {
@@ -1552,7 +1581,7 @@ export async function applyManagement(
       await Promise.allSettled(eligibleTrades.map(trade => processTrade(trade)))
     }
 
-    if (action === 'close' && liveMgmtFast && signal.channel_id) {
+    if (action === 'close' && liveMgmtFast && signal.channel_id && !hasExplicitMgmtParent) {
       await finalizeMgmtSignal(ctx, signal.id)
       deferMgmtCloseCleanup({
         ctx,
@@ -1713,14 +1742,16 @@ export async function applyManagement(
         tradeSymbols: rows.map(r => r.symbol),
         pendingSymbols: pendingLegs.map(l => l.symbol),
       })
-      await upsertChannelActiveTradeParams(ctx.supabase, {
-        userId: signal.user_id,
-        channelId: signal.channel_id,
-        symbols,
-        stoploss: effectiveSl,
-        tpLevels: effectiveTpLevels.length ? effectiveTpLevels : undefined,
-        replace: true,
-      })
+      if (!hasExplicitMgmtParent) {
+        await upsertChannelActiveTradeParams(ctx.supabase, {
+          userId: signal.user_id,
+          channelId: signal.channel_id,
+          symbols,
+          stoploss: effectiveSl,
+          tpLevels: effectiveTpLevels.length ? effectiveTpLevels : undefined,
+          replace: true,
+        })
+      }
       // Record the latest adjustment as the authoritative per-basket target so
       // new layers + reconcile use it (single source of truth, latest wins).
       for (const [basketKey, brokerRows] of rowsByBrokerSignal) {
@@ -1779,6 +1810,7 @@ export async function applyManagement(
     if (
       (action === 'breakeven' || action === 'partial_breakeven')
       && signal.channel_id
+      && !hasExplicitMgmtParent
       && channelBreakevenSlBySymbol.size > 0
     ) {
       const symbols = symbolsForChannelParamsPersist({
@@ -1836,7 +1868,11 @@ export async function applyManagement(
       }
     }
 
-    if (action === 'close' && cancelledPendingScopes.size > 0 && !liveMgmtFast) {
+    if (
+      action === 'close'
+      && cancelledPendingScopes.size > 0
+      && (!liveMgmtFast || hasExplicitMgmtParent)
+    ) {
       const scopes = Array.from(cancelledPendingScopes)
         .map(enc => JSON.parse(enc) as RangePendingCancelScope)
         .filter(scope => {
@@ -1852,7 +1888,7 @@ export async function applyManagement(
       }
     }
 
-    if (action === 'close' && signal.channel_id && !liveMgmtFast) {
+    if (action === 'close' && signal.channel_id && !liveMgmtFast && !hasExplicitMgmtParent) {
       const pendingCancelled = await cancelChannelBrokerPendingOrders({
         supabase: ctx.supabase,
         userId: signal.user_id,
