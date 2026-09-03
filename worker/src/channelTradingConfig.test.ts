@@ -87,10 +87,10 @@ test('linked channel with empty manual_settings heals from broker manual_setting
 test('resolveChannelTradingConfig uses per-channel override', () => {
   const broker = {
     copier_mode: 'manual' as const,
-    manual_settings: { fixed_lot: 0.05, trade_style: 'single' },
+    manual_settings: { fixed_lot: 0.05, trade_style: 'single', add_new_trades_to_existing: false },
     ai_settings: {},
     channel_trading_configs: {
-      'ch-a': { copier_mode: 'manual' as const, manual_settings: { fixed_lot: 0.02, trade_style: 'multi' } },
+      'ch-a': { copier_mode: 'manual' as const, manual_settings: { fixed_lot: 0.02, trade_style: 'multi', add_new_trades_to_existing: true } },
       'ch-b': { copier_mode: 'manual' as const, manual_settings: { fixed_lot: 0.08, trade_style: 'single' } },
     },
     signal_channel_ids: ['ch-a', 'ch-b'],
@@ -99,8 +99,10 @@ test('resolveChannelTradingConfig uses per-channel override', () => {
   const b = resolveChannelTradingConfig(broker, 'ch-b')
   assert.equal(a.manual_settings.trade_style, 'multi')
   assert.equal(a.manual_settings.fixed_lot, 0.02)
+  assert.equal(a.manual_settings.add_new_trades_to_existing, true)
   assert.equal(a.config_source, 'per_channel')
   assert.equal(b.manual_settings.fixed_lot, 0.08)
+  assert.equal(b.manual_settings.add_new_trades_to_existing, true)
   assert.equal(b.config_source, 'per_channel')
 })
 

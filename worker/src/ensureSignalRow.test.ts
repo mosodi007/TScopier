@@ -149,6 +149,66 @@ test('ensureSignalRow detects duplicate telegram message and persists non-execut
   assert.equal(stub.skip_reason, 'duplicate_telegram_message')
 })
 
+test('ensureSignalRow duplicate Stefan complete entry replay does not execute twice', async () => {
+  let attempt = 0
+  const payloads: Record<string, unknown>[] = []
+  const supabase = {
+    from() {
+      return {
+        upsert(payload: Record<string, unknown>) {
+          attempt += 1
+          payloads.push(payload)
+          if (attempt === 1) {
+            return Promise.resolve({
+              error: { message: 'duplicate key value violates unique constraint "signals_user_channel_telegram_message_unique_idx"' },
+            })
+          }
+          return Promise.resolve({ error: null })
+        },
+        select() {
+          const chain = {
+            eq() {
+              return chain
+            },
+            limit() {
+              return Promise.resolve({
+                data: [{ id: '11111111-1111-1111-1111-111111111111' }],
+                error: null,
+              })
+            },
+          }
+          return chain
+        },
+      }
+    },
+  }
+
+  const result = await ensureSignalRow(supabase as never, {
+    id: '22222222-2222-2222-2222-222222222222',
+    user_id: 'user-stefan',
+    channel_id: 'channel-gold',
+    raw_message: 'GOLD BUY SETUP\n\nGold Buy Zone 4441 - 4436\n\nSL : 4531\n\nTP1 : 4446\nTP2 : 4451\nTP3 : 4456\nTP4 : Hold',
+    status: 'parsed',
+    parsed_data: {
+      action: 'buy',
+      symbol: 'XAUUSD',
+      entry_zone_low: 4436,
+      entry_zone_high: 4441,
+      sl: 4531,
+      tp: [4446, 4451, 4456],
+    },
+    telegram_message_id: 'stefan-signal-4',
+  })
+
+  assert.equal(result.duplicate, true)
+  assert.equal(result.existingSignalId, '11111111-1111-1111-1111-111111111111')
+  assert.equal(payloads.length, 2)
+  const stub = payloads[1] ?? {}
+  assert.equal(stub.status, 'skipped')
+  assert.equal(stub.skip_reason, 'duplicate_telegram_message')
+  assert.equal(stub.telegram_message_id, null)
+})
+
 test('ensureSignalRow duplicate close message (incident 2348668186 shape): owner stays executable, loser stub is not', async () => {
   // Two deliveries of the same "Let's CLOSE our trade now" telegram message
   // raced the listener (live event + poll overlap). The FIRST call owns the
