@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useAuth } from '../context/AuthContext'
-import { useBrokerAccounts } from '../context/BrokerAccountsContext'
+import { useBrokerAccountsOptional } from '../context/BrokerAccountsContext'
 import { useSubscription } from '../context/SubscriptionContext'
 import { isBrokerSessionConnected } from '../lib/brokerReconnect'
 import { resolveCopierStartBlocked, type CopierStartBlockedReason } from '../lib/copierStartBlocked'
@@ -10,7 +10,10 @@ import { supabase } from '../lib/supabase'
 export function useCopierStartBlocked() {
   const { user } = useAuth()
   const { hasActiveSubscription, usage, usageLoading, loading: subscriptionLoading } = useSubscription()
-  const { brokers, loading: brokersLoading } = useBrokerAccounts()
+  const brokerCtx = useBrokerAccountsOptional()
+  const emptyBrokers = useMemo(() => [] as never[], [])
+  const brokers = brokerCtx?.brokers ?? emptyBrokers
+  const brokersLoading = brokerCtx?.loading ?? true
   const [telegramConnected, setTelegramConnected] = useState<boolean | null>(() => {
     if (!user?.id) return null
     return getCachedTgSession(user.id)
