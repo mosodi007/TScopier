@@ -77,6 +77,12 @@ export const fr: Translations = {
       stopCopier: 'Mettre le copieur en pause',
       confirmTitle: 'Mettre le copieur en pause ?',
       confirmBody: 'La copie des signaux, l\'exécution des trades et les journaux du copieur s\'arrêteront jusqu\'à reprise.',
+      setupBroker: 'reliez un broker',
+      setupTelegram: 'connectez Telegram',
+      setupChannels: 'ajoutez un canal',
+      bannerAction: 'Aller à la configuration',
+      bannerText: 'Pour démarrer le copieur, veuillez {items}.',
+      bannerLastSep: ' et ',
     },
     notifications: {
       title: 'Notifications',

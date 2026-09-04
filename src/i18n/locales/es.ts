@@ -77,6 +77,12 @@ export const es: Translations = {
       stopCopier: 'Pausar copiador',
       confirmTitle: '¿Pausar el copiador?',
       confirmBody: 'La copia de señales, la ejecución de trades y los registros del copiador se detendrán hasta que reanudes.',
+      setupBroker: 'enlaza un broker',
+      setupTelegram: 'conecta Telegram',
+      setupChannels: 'añade un canal',
+      bannerAction: 'Ir a la configuración',
+      bannerText: 'Para iniciar el copiador, por favor {items}.',
+      bannerLastSep: ' y ',
     },
     notifications: {
       title: 'Notificaciones',

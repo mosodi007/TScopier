@@ -545,7 +545,7 @@ export function AppLayout({ onAssistantTrigger }: AppLayoutProps) {
             'lg:pt-0',
           )}
         >
-          <AppCopierSetupBanner />
+          {!deferAppBootstrap && <AppCopierSetupBanner />}
           <DashboardKeepAlive />
           {!deferAppBootstrap && !onDashboardRoute && <Outlet />}
         </main>

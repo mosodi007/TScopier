@@ -81,6 +81,8 @@ export const en: Translations = {
       setupTelegram: 'connect Telegram',
       setupChannels: 'add a channel',
       bannerAction: 'Go to setup',
+      bannerText: 'To start the copier, please {items}.',
+      bannerLastSep: ' and ',
     },
     notifications: {
       title: 'Notifications',

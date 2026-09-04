@@ -77,6 +77,8 @@ export interface NavTranslations {
     setupTelegram?: string
     setupChannels?: string
     bannerAction?: string
+    bannerText?: string
+    bannerLastSep?: string
   }
   notifications: {
     title: string
