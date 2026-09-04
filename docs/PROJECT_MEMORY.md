@@ -2,6 +2,29 @@
 
 ## Changelog
 
+### 2026-09-03 — Copier setup banner: specific missing-item messaging below navbar
+
+- **Plain English:** When a user tries to start the copier but hasn't finished setting up their account, they now see an amber banner directly below the top navigation bar that tells them exactly what's missing — "link a broker", "connect Telegram", "add a channel" — with a link to the right page to fix it. Previously the copier toggle button just showed a generic disabled "Copier Stopped" message with no way to resolve it. The earlier "Fix setup" link on the toggle button itself was removed in favour of this more prominent, full-width banner approach. Two defects found during rollout were fixed: the banner initially crashed the whole page (blank screen), and then, after a stop-gap fix, it silently never appeared at all.
+- **Root cause (technical):**
+  1. The first version mounted `AppCopierSetupBanner` inside `AppTopBanners` (App.tsx level), which renders **above** `AppShell` — outside `BrokerAccountsProvider`. The banner calls `useCopierStartBlocked`, which calls `useBrokerAccounts()`; that hook throws when no provider exists → whole app crashed → blank page.
+  2. The stop-gap made broker state default to "loading" forever when the provider is absent (`useBrokerAccountsOptional` + `brokersLoading = true`), which stopped the crash but made `resolving` permanently true — the banner could never render anywhere, on any page.
+  3. Proper fix (commit `6d094ab1`): mount the banner in `AppLayout`'s `<main>` region, directly below the top navbar — inside `BrokerAccountsProvider`. The workaround was fully reverted; `useBrokerAccounts()` stays strict (throws) so a silent degradation path cannot reappear.
+  4. Post-review fixes (commit `b3c2f9bd`): the CTA linked to `/copier`, a non-existent route that fell into the referral-code catch-all and sent logged-in users to `/signup` — now links to `/channels`. Copy was English-only outside `en` — now all 8 locales have the keys and the sentence frame/conjunction are locale templates. Banner is gated on `deferAppBootstrap` so it cannot flash a false "link a broker" while broker state is still loading.
+- **Fix (files):**
+  - `src/hooks/useCopierStartBlocked.ts` — extended return object with `missingBroker`, `missingTelegram`, `missingChannels` booleans (derived from the existing internal checks); strict `useBrokerAccounts()`.
+  - `src/components/layout/AppCopierSetupBanner.tsx` — new component: amber banner with `Settings2` icon, lists missing items, links to `/brokers` (if broker missing) or `/channels` (otherwise). i18n via `bannerText` template (`{items}`) + `bannerLastSep` per locale.
+  - `src/components/layout/AppLayout.tsx` — banner rendered as first child of `<main>` (below the top navbar), gated on `!deferAppBootstrap`.
+  - `src/components/layout/AppTopBanners.tsx` — unchanged (reverted; banner does not live here).
+  - `src/components/layout/CopierPauseToggle.tsx` — reverted: removed the `Link`-based "Fix setup" override; button is now always a disabled red button when locked.
+  - `src/i18n/locales/{en,es,fr}.ts` + `src/i18n/locales/chrome/{pl,ru,sv,nl,ja,ar}.ts` + `types.ts` — added `setupBroker`, `setupTelegram`, `setupChannels`, `bannerAction`, `bannerText`, `bannerLastSep` keys to `copierPause`.
+- **Design decisions:**
+  - Banner renders below the top navbar inside the authenticated layout (scrolls with content), not in the fixed banner stack above the header — that stack is outside the broker provider.
+  - If the broker is missing, the "Go to setup" link points to `/brokers`. For Telegram or channel issues, it points to `/channels` (setup page hosting Telegram connect + channel management). `/copier` does not exist as a route and must not be linked.
+  - Subscription-blocked state is unaffected — that still shows the disabled red button on the toggle with no banner, since it requires a different resolution flow.
+- **Tests/verification:** `npx tsc -b` clean; lint clean on all changed/new files (pre-existing debt in `useCopierStartBlocked.ts`/`BrokerAccountsContext.tsx` on untouched lines is unrelated); full `npm test` suite passes (vitest + node:test); `vite build` clean. Post-implementation review (code-tester + code-review subagents): tester PASS; reviewer findings (HIGH `/copier` dead link, MEDIUM i18n, LOW bootstrap flash) all fixed and re-verified.
+- **Deploy state:** Commits `01f2ce2e`, `89fcda9a`, `6d094ab1`, `b3c2f9bd` on `staging`. `01f2ce2e` + `89fcda9a` pushed to `origin/main`, `origin/staging`, `upstream/staging`. `6d094ab1` pushed to `origin/staging` + `upstream/staging`. `b3c2f9bd` pushed to `origin/staging` only — needs push to `upstream/staging` (and `origin/main` if this is release-worthy).
+- **Follow-ups:** Consider surfacing the specific missing precondition in the tooltip on the disabled toggle button as well (e.g. "No connected broker account"), for users who look at the button instead of the banner.
+
 ### 2026-09-03 — signal-review-email: fix edge function auth preventing approval emails
 
 - **Plain English:** Users who should receive "signal waiting for your approval" emails were not getting them. The worker was correctly detecting signals that need human review and attempting to send the email, but the email function itself was failing silently before it could send anything. We removed the faulty security check, deployed the function to both environments, and confirmed emails now reach users' inboxes.
