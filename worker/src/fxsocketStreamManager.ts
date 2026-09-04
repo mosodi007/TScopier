@@ -6,6 +6,16 @@ import {
   type FxsocketWsTopic,
 } from './fxsocketWsClient'
 import { isBrokerSimulatorEnforced } from './brokerExecutionMode'
+import { testFlagEnabled } from './testFlags'
+
+/**
+ * Account id used only by the test-only health probe client. The probe exists so
+ * the FXSOCKET_TEST_FORCE_DISCONNECT flag and its SustainedOutageTracker can be
+ * exercised on a staging worker without requiring a browser to open /broker/stream.
+ * Because the flag branch in FxsocketWsClient.connect() returns before opening a
+ * socket, this id is never sent to the real FxSocket endpoint.
+ */
+const HEALTH_PROBE_ACCOUNT_ID = '__health_probe__'
 
 export type FxsocketStreamHandler = FxsocketWsMessageHandler
 
@@ -45,12 +55,26 @@ export class FxsocketStreamManager {
   private readonly apiKey: string
   private readonly baseUrl?: string
   private readonly streams = new Map<string, AccountStream>()
+  private readonly healthProbe: FxsocketWsClient | null = null
 
   constructor(opts?: { apiKey?: string; baseUrl?: string }) {
     const key = (opts?.apiKey ?? process.env.FXSOCKET_API_KEY ?? '').trim()
     if (!key) throw new Error('FxsocketStreamManager: FXSOCKET_API_KEY required')
     this.apiKey = key
     this.baseUrl = opts?.baseUrl?.trim() || process.env.FXSOCKET_BASE_URL?.trim() || undefined
+
+    // Test-only: exercise the FXSOCKET_TEST_FORCE_DISCONNECT outage alert without
+    // needing a browser to open /broker/stream. Only created when the flag is on,
+    // so it can never cause a false alert in production.
+    if (testFlagEnabled(process.env, 'FXSOCKET_TEST_FORCE_DISCONNECT')) {
+      this.healthProbe = new FxsocketWsClient({
+        accountId: HEALTH_PROBE_ACCOUNT_ID,
+        apiKey: this.apiKey,
+        baseUrl: this.baseUrl,
+      })
+      this.healthProbe.connect()
+      console.log('[fxsocketStreamManager] test health probe armed (FXSOCKET_TEST_FORCE_DISCONNECT)')
+    }
   }
 
   /**
@@ -169,6 +193,9 @@ export class FxsocketStreamManager {
   }
 
   closeAll(): void {
+    if (this.healthProbe) {
+      this.healthProbe.close()
+    }
     for (const id of [...this.streams.keys()]) {
       this.teardownAccount(id)
     }

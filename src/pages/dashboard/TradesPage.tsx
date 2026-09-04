@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { ArrowUpRight, ArrowDownRight, ChevronLeft, ChevronRight, ChevronRight as ChevronRightIcon, Minus, RefreshCw, TrendingUp, TrendingDown } from 'lucide-react'
 import { useAuth } from '../../context/AuthContext'
+import { useHumanReview } from '../../context/HumanReviewContext'
 import { useT } from '../../context/LocaleContext'
 import { interpolate } from '../../i18n/interpolate'
 import { useTradesData } from '../../hooks/useTradesData'
@@ -29,12 +31,28 @@ type PageSizeOption = (typeof PAGE_SIZE_OPTIONS)[number]
 export function TradesPage() {
   const t = useT()
   const { user } = useAuth()
+  const [searchParams, setSearchParams] = useSearchParams()
+  const { pending } = useHumanReview()
   const { trades, loading, refreshing, error, lastSyncedAt, refresh } = useTradesData(user?.id)
   const [filter, setFilter] = useState<Filter>('all')
   const [page, setPage] = useState(1)
   const [pageSize, setPageSize] = useState<PageSizeOption>(10)
   const [selectedTrade, setSelectedTrade] = useState<MtTrade | null>(null)
   const [selectedReviewSignal, setSelectedReviewSignal] = useState<Signal | null>(null)
+  const deepLinkConsumedRef = useState(() => ({ current: false }))[0]
+
+  useEffect(() => {
+    const reviewId = searchParams.get('review')
+    if (!reviewId || deepLinkConsumedRef.current || selectedReviewSignal) return
+    const match = pending.find(item => item.signal.id === reviewId)
+    if (match) {
+      deepLinkConsumedRef.current = true
+      requestAnimationFrame(() => {
+        setSelectedReviewSignal(match.signal)
+        setSearchParams({}, { replace: true })
+      })
+    }
+  })
 
   const filters: { value: Filter; label: string; count: number }[] = useMemo(
     () => [

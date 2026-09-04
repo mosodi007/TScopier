@@ -329,6 +329,58 @@ TP: open`
     assert.equal(result.parsed.open_tp, true)
   })
 
+  it('parses Stefan overlapping GOLD BUY setup posts as complete entries', () => {
+    const signal3 = `GOLD BUY SETUP
+
+Gold Buy Zone 4438 - 4433
+
+SL : 4528
+
+TP1 : 4443
+TP2 : 4448
+TP3 : 4453
+TP4 : Hold`
+    const signal4 = `GOLD BUY SETUP
+
+Gold Buy Zone 4441 - 4436
+
+SL : 4531
+
+TP1 : 4446
+TP2 : 4451
+TP3 : 4456
+TP4 : Hold`
+
+    const parsed3 = parseChannelMessageSync(signal3, DEFAULT_CHANNEL_KEYWORDS, lexicon)
+    const parsed4 = parseChannelMessageSync(signal4, DEFAULT_CHANNEL_KEYWORDS, lexicon)
+
+    for (const result of [parsed3, parsed4]) {
+      assert.equal(result.status, 'parsed')
+      assert.equal(result.parsed.action, 'buy')
+      assert.equal(result.parsed.symbol, 'XAUUSD')
+      assert.equal(result.parsed.entry_price, null)
+    }
+    assert.equal(parsed3.parsed.entry_zone_low, 4433)
+    assert.equal(parsed3.parsed.entry_zone_high, 4438)
+    assert.equal(parsed3.parsed.sl, 4528)
+    assert.deepEqual(parsed3.parsed.tp, [4443, 4448, 4453])
+    assert.equal(parsed4.parsed.entry_zone_low, 4436)
+    assert.equal(parsed4.parsed.entry_zone_high, 4441)
+    assert.equal(parsed4.parsed.sl, 4531)
+    assert.deepEqual(parsed4.parsed.tp, [4446, 4451, 4456])
+  })
+
+  it('keeps genuine management messages as management, not entries', () => {
+    const breakeven = parseChannelMessageSync('Move SL to breakeven', DEFAULT_CHANNEL_KEYWORDS, lexicon)
+    assert.equal(breakeven.status, 'parsed')
+    assert.equal(breakeven.parsed.action, 'breakeven')
+
+    const partial = parseChannelMessageSync('Close half and move SL to entry', DEFAULT_CHANNEL_KEYWORDS, lexicon)
+    assert.equal(partial.status, 'parsed')
+    assert.equal(partial.parsed.action, 'partial_breakeven')
+    assert.equal(partial.parsed.partial_close_fraction, 0.5)
+  })
+
   it('parses GTMO VIP re-entry with custom channel keywords (tp: open must not flip sell)', () => {
     const gtmoKeywords = normalizeChannelKeywords({
       signal: {

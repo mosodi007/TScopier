@@ -2,6 +2,74 @@
 
 ## Changelog
 
+### 2026-09-03 — signal-review-email: fix edge function auth preventing approval emails
+
+- **Plain English:** Users who should receive "signal waiting for your approval" emails were not getting them. The worker was correctly detecting signals that need human review and attempting to send the email, but the email function itself was failing silently before it could send anything. We removed the faulty security check, deployed the function to both environments, and confirmed emails now reach users' inboxes.
+- **Root cause (technical):** The `signal-review-email` edge function had a custom in-code auth guard that compared the caller's `Authorization: Bearer` token against `Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")`. Supabase's edge runtime now injects `SUPABASE_SERVICE_ROLE_KEY` in the new `sb_secret_...` format (a short scoped key, length 41), not the legacy full JWT service key (length ~200). The guard's `timingSafeEqual` comparison therefore always failed (length mismatch alone causes immediate `false`), returning a 401 before the function could call Resend or log anything. The worker's fire-and-forget `fetch` received a 401 response (which is not a rejected promise), so the `.catch()` never triggered — the failure was completely silent in production logs. None of the other email functions (`send-subscription-email`, `send-verification-email`) performed this Bearer-to-service-key comparison; they used the env value only to build the Supabase client, which works fine with the new scoped key.
+- **Fix (files):**
+  - `supabase/functions/signal-review-email/index.ts` — removed the custom auth guard (lines 98–105: `timingSafeEqual`, `authHeader`/`token` comparison, and the 401 block). The function now relies entirely on Supabase's built-in `verify_jwt` mechanism.
+  - `supabase/config.toml` — added `[functions.signal-review-email] verify_jwt = true`, so Supabase validates the worker's service-role JWT signature before the function runs. This keeps the endpoint secure (only valid service-role or anon JWTs accepted) without the broken custom guard.
+  - `supabase/migrations/` — `email_campaign_log` table was already present on both environments (created/patched during this investigation; it was the table the function writes to after sending).
+- **Design decisions / safety:**
+  - The `verify_jwt = true` setting means Supabase validates the JWT signature using the project's JWKS. The worker's legacy service-role JWT is a valid signed JWT for the project, so it passes. Anonymous or forged requests are rejected at the gateway level, before the function runs. This is the same mechanism used by other secured functions (`create-checkout-session`, `assistant-chat`, etc.).
+  - The in-code guard was removed because it compared against a value it could not reliably match (`sb_secret_` vs JWT). Keeping it would have required the worker to send the new `sb_secret_` value instead of the legacy JWT — a breaking change with unclear path for other systems that depend on the JWT format.
+  - The `email_campaign_log` insert (audit record) remains in the function. Every successful send is logged with `signal_id`, `channel_label`, `resend_id`, and `triggered_by: "worker_escalation"`.
+- **Tests/verification:**
+  - Manual invocation on staging: created a fresh test signal with `skip_reason = "AI classified as uncertain; human review required"` and called the function with the staging service-role JWT → `{"ok":true,"skipped":false,"resend_id":"01a0665b-6b35-743d-9e8f-114468cbc6ff"}`.
+  - `email_campaign_log` row confirmed in staging DB with correct `resend_id`, `signal_id`, `channel_label: "GOLD BTCUSD XAUUSD FOREX SIGNALS"`.
+  - `verify_jwt=true` confirmed working: function list shows `v4 verify_jwt=True` on staging, `v2 verify_jwt=True` on prod.
+  - Post-rebase: `git push origin staging --force` and `git push origin staging:main` succeeded; all remotes at `e77f5d92`.
+- **Deploy state:** Committed on `staging` (`e77f5d92`), pushed to `origin/staging`, `origin/main`, `upstream/staging`. Edge function deployed to staging (v4) and prod (v2). The function is live — the next time the worker classifies a signal as `uncertain` and logs `ai_parse_review_required`, the approval email will be delivered.
+- **Follow-ups:** Monitor Resend delivery logs and `email_campaign_log` rows over the next few days to confirm emails are consistently delivered. If the user reports still not receiving emails, check their `user_profiles.notification_email_enabled` flag (the function returns `email_notifications_disabled` and skips the send when this is `false`).
+
+### 2026-08-31 — FxSocket disconnect test flag fix: health probe created at startup
+
+- **Plain English:** The FxSocket outage test switch was not working on the staging trade worker. It only fired when someone had the broker dashboard open in a browser, because the piece of code that listens for a disconnect was only created on demand for the dashboard. With nobody watching the dashboard, the switch did nothing and the outage alert never fired. We now create a small "health probe" connection at worker startup when the test switch is on, so the switch works by itself and the outage alert fires without needing anyone to have the dashboard open.
+- **Root cause (technical):** `FXSOCKET_TEST_FORCE_DISCONNECT` is checked inside `FxsocketWsClient.connect()`. But `FxsocketWsClient` (which owns the `SustainedOutageTracker` behind the `FXSOCKET_SOCKET_SUSTAINED_OUTAGE` alert) is only instantiated by `FxsocketStreamManager.subscribe()`, which is only called when a browser opens the `/broker/stream` WebSocket proxy. On a trade worker with no browser connected, the client never existed, so `connect()` never ran, the flag never fired, and no outage alert was emitted — the flag silently did nothing.
+- **Fix (files):**
+  - `worker/src/fxsocketStreamManager.ts` — the constructor now creates a test-only health-probe `FxsocketWsClient` (account id `__health_probe__`) and calls `connect()` **only when `testFlagEnabled(process.env, 'FXSOCKET_TEST_FORCE_DISCONNECT')` is true**, plus a startup log (`[fxsocketStreamManager] test health probe armed`). `closeAll()` closes the probe.
+  - `worker/src/fxsocketWsClient.health.test.ts` — added `loadManagerModule()` helper and two tests: probe is created (and opens no socket) when the flag is on; probe is not created when the flag is off.
+- **Design decisions / safety:**
+  - The probe is created only when the flag is on, so it can never cause a false outage alert in production (flag off → no probe → existing behavior). Double-guarded: `testFlagEnabled` refuses production, and `connect()`'s flag branch returns before opening a socket.
+  - The dummy account id `__health_probe__` is never sent to the real FxSocket endpoint, because `connect()`'s flag branch returns before `new WebSocket(...)`.
+  - The probe's outage timer is `.unref()`'d, so it does not keep the worker alive and fires a single alert (`alertEmitted` dedupes).
+  - `closeAll()` → `close()` → tracker `reset()` cancels a pending alert on shutdown.
+- **Tests/verification:** `npm --prefix worker run build` clean; 13 tests pass in `fxsocketStreamManager.test.ts` + `fxsocketWsClient.health.test.ts`; `npx eslint` clean on changed files.
+- **Review:** PASS_WITH_NOTES (no blocking findings). Three LOW operational notes: probe shares the provider-scoped dedupe key with real alerts (fine for a staging-only flag), the flag is process-wide (inherent design), and because the Dockerfile hardcodes `NODE_ENV=production` the flag is inert unless `SENTRY_ENVIRONMENT=staging` is set — addressed by the startup log and confirmed the staging env sets it.
+- **Deploy state:** Committed on `staging`, pushed to `staging` remotes. Trade worker must be redeployed for the flag to take effect.
+- **Follow-ups:** After redeploy with the flag still `true`, verify `FXSOCKET_SOCKET_SUSTAINED_OUTAGE` appears in Sentry ~60s after startup. Then set the flag back to `false`.
+
+### 2026-08-31 — Sentry staging test flags: critical health alert verification
+
+- **Plain English:** We added simple on/off switches that let operators force specific failures on staging to verify Sentry actually fires the matching alerts. Every flag defaults to off and is refused in production, so a staging setting can never crash or disrupt the live system. We also added real system-wide trade-pipeline failure monitoring — the worker now tracks whether order executions are failing at an abnormal rate and fires a Critical Issue when the failure rate crosses a threshold.
+- **Root cause (technical):** The worker had no way to prove its Sentry alerts actually fire for real failures. Four critical failure domains (FxSocket outage, worker death, uncaught exception, trade execution failure) now have production monitoring plus a test flag to trigger each failure on staging. The test flags are read through a guard (`worker/src/testFlags.ts`) that refuses to act when the environment is detected as production (via `SENTRY_ENVIRONMENT`, `RAILWAY_ENVIRONMENT_NAME`, or `NODE_ENV`). The trade-pipeline monitor (`TradeExecutionMonitor`) uses a sliding window, configurable failure-rate threshold, and alert re-arming on recovery. A pure `tradeOutcomeIsSuccess` classifier correctly distinguishes genuine execution failures from deterministic business skips (e.g. "no new trades" mode) so normal skip-heavy traffic does not inflate the failure denominator.
+- **Fix (files):**
+  - `worker/src/testFlags.ts` + `testFlags.test.ts` — production guard (`isProductionEnvironment`) + `testFlagEnabled`, `testFlagNumber`, `testFlagPercent` helpers.
+  - `worker/src/fxsocketWsClient.ts` — `FXSOCKET_TEST_FORCE_DISCONNECT` in `connect()`: disconnects and stays down until flag is set back to false. No auto-reconnect.
+  - `worker/src/observability/workerHeartbeat.ts` — `WORKER_HEARTBEAT_TEST_FORCE_STOP`: skips Sentry check-ins when enabled.
+  - `worker/src/index.ts` — `CRITICAL_EXCEPTION_TEST_FORCE`: throws uncaught exception 1s after startup (hardcoded delay).
+  - `worker/src/observability/tradeExecutionMonitor.ts` + `.test.ts` — `TradeExecutionMonitor` class with `tradeOutcomeIsSuccess` classifier, `captureCriticalHealthIssue` integration, recovery re-arming, hashed brokerId.
+  - `worker/src/tradeExecutor/TradeExecutor.ts` — `executeAndRecord` wraps execution in try/catch, records outcomes to monitor. `recordTradeExecutionOutcome` uses `tradeOutcomeIsSuccess` for classification.
+  - `worker/.env.example` — all flags documented.
+  - `docs/sentry-critical-health-plan.md` + `docs/sentry-test-flags.html` + `.pdf` — full plan and one-page reference.
+- **Design decisions:**
+  - All test flags are boolean `true`/`false` — no numeric knobs for operators to worry about.
+  - `FXSOCKET_TEST_FORCE_DISCONNECT` is set-and-forget: socket stays down until flag is false. No reconnect timer.
+  - `CRITICAL_EXCEPTION_TEST_FORCE` hardcodes a 1s delay before crash so Sentry SDK initializes first.
+  - Production detection defaults to "production" when env vars are unset (fail-closed safety).
+- **Review findings fixed during implementation:**
+  - HIGH: Production guard missing on `testFlagNumber`/`testFlagPercent` — added guard, tested.
+  - HIGH: Exceptions from order execution bypassed the monitor — added `executeAndRecord` catch+record.
+  - HIGH: Deterministic-skip outcomes counted as failures — added `tradeOutcomeIsSuccess` classifier.
+  - MEDIUM: `alertEmitted` never re-armed — added recovery re-arming.
+  - MEDIUM: Revision take-over path bypassed the monitor — instrumented all call sites.
+  - MEDIUM: brokerId leaked truncated — uses `hashHealthResourceId`.
+  - LOW: Stale `FXSOCKET_TEST_DISCONNECT_DURATION_MS` env var in test — removed.
+- **Tests/verification:** 27 tests pass across `testFlags.test.ts`, `tradeExecutionMonitor.test.ts`, `fxsocketWsClient.health.test.ts`. Typecheck clean.
+- **Deploy state:** Committed on `staging` (`2245bd79`), pushed to `upstream/staging`, `upstream/dev`, `origin/staging`.
+- **Follow-ups:**
+  1. Domain 5 (cron/background job stall monitoring) is not yet implemented — would need a `SchedulerMonitor` wrapping the monitor loops.
+
 ### 2026-08-28 — npm audit fix: 15 vulnerabilities across root, worker, and backoffice — fixed
 
 - **Plain English:** GitHub Dependabot flagged 41 vulnerabilities across the repo. Most were in transitive dependencies — libraries our code depends on indirectly. None were in code we wrote ourselves. The fixes were all version bumps via `npm audit fix`: patched releases pulled in from upstream. The risk was real (DoS, SSRF, path traversal, header injection), but none were actively exploited in our deployment context. All three package ecosystems are now clean.

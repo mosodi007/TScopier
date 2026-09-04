@@ -140,6 +140,36 @@ test('shouldRouteAsBasketParameterRefresh: full entry with zone without market n
   )
 })
 
+test('shouldRouteAsBasketParameterRefresh: Stefan complete same-side GOLD BUY opens trade', () => {
+  assert.equal(
+    shouldRouteAsBasketParameterRefresh({
+      action: 'buy',
+      symbol: 'XAUUSD',
+      entry_zone_low: 4436,
+      entry_zone_high: 4441,
+      sl: 4531,
+      tp: [4446, 4451, 4456],
+      raw_instruction: 'GOLD BUY SETUP\n\nGold Buy Zone 4441 - 4436\n\nSL : 4531\n\nTP1 : 4446\nTP2 : 4451\nTP3 : 4456\nTP4 : Hold',
+    }),
+    false,
+  )
+})
+
+test('shouldRouteAsBasketParameterRefresh: opposite direction full entry opens trade', () => {
+  assert.equal(
+    shouldRouteAsBasketParameterRefresh({
+      action: 'sell',
+      symbol: 'XAUUSD',
+      entry_zone_low: 4436,
+      entry_zone_high: 4441,
+      sl: 4452,
+      tp: [4430, 4425],
+      raw_instruction: 'GOLD SELL SETUP\nGold Sell Zone 4441 - 4436\nSL : 4452\nTP1 : 4430\nTP2 : 4425',
+    }),
+    false,
+  )
+})
+
 test('shouldRouteAsBasketParameterRefresh: modify with SL', () => {
   assert.equal(shouldRouteAsBasketParameterRefresh({ action: 'modify', sl: 100, tp: null }), true)
 })

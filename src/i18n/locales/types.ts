@@ -73,6 +73,10 @@ export interface NavTranslations {
     stopCopier: string
     confirmTitle: string
     confirmBody: string
+    setupBroker?: string
+    setupTelegram?: string
+    setupChannels?: string
+    bannerAction?: string
   }
   notifications: {
     title: string
