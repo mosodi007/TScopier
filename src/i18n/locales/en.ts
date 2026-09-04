@@ -77,6 +77,10 @@ export const en: Translations = {
       stopCopier: 'Pause Copier',
       confirmTitle: 'Pause copier',
       confirmBody: 'Signal copying, trade execution, and copier logs will stop until you resume.',
+      setupBroker: 'link a broker',
+      setupTelegram: 'connect Telegram',
+      setupChannels: 'add a channel',
+      bannerAction: 'Go to setup',
     },
     notifications: {
       title: 'Notifications',

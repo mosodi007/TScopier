@@ -2,6 +2,26 @@
 
 ## Changelog
 
+### 2026-09-03 — signal-review-email: fix edge function auth preventing approval emails
+
+- **Plain English:** Users who should receive "signal waiting for your approval" emails were not getting them. The worker was correctly detecting signals that need human review and attempting to send the email, but the email function itself was failing silently before it could send anything. We removed the faulty security check, deployed the function to both environments, and confirmed emails now reach users' inboxes.
+- **Root cause (technical):** The `signal-review-email` edge function had a custom in-code auth guard that compared the caller's `Authorization: Bearer` token against `Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")`. Supabase's edge runtime now injects `SUPABASE_SERVICE_ROLE_KEY` in the new `sb_secret_...` format (a short scoped key, length 41), not the legacy full JWT service key (length ~200). The guard's `timingSafeEqual` comparison therefore always failed (length mismatch alone causes immediate `false`), returning a 401 before the function could call Resend or log anything. The worker's fire-and-forget `fetch` received a 401 response (which is not a rejected promise), so the `.catch()` never triggered — the failure was completely silent in production logs. None of the other email functions (`send-subscription-email`, `send-verification-email`) performed this Bearer-to-service-key comparison; they used the env value only to build the Supabase client, which works fine with the new scoped key.
+- **Fix (files):**
+  - `supabase/functions/signal-review-email/index.ts` — removed the custom auth guard (lines 98–105: `timingSafeEqual`, `authHeader`/`token` comparison, and the 401 block). The function now relies entirely on Supabase's built-in `verify_jwt` mechanism.
+  - `supabase/config.toml` — added `[functions.signal-review-email] verify_jwt = true`, so Supabase validates the worker's service-role JWT signature before the function runs. This keeps the endpoint secure (only valid service-role or anon JWTs accepted) without the broken custom guard.
+  - `supabase/migrations/` — `email_campaign_log` table was already present on both environments (created/patched during this investigation; it was the table the function writes to after sending).
+- **Design decisions / safety:**
+  - The `verify_jwt = true` setting means Supabase validates the JWT signature using the project's JWKS. The worker's legacy service-role JWT is a valid signed JWT for the project, so it passes. Anonymous or forged requests are rejected at the gateway level, before the function runs. This is the same mechanism used by other secured functions (`create-checkout-session`, `assistant-chat`, etc.).
+  - The in-code guard was removed because it compared against a value it could not reliably match (`sb_secret_` vs JWT). Keeping it would have required the worker to send the new `sb_secret_` value instead of the legacy JWT — a breaking change with unclear path for other systems that depend on the JWT format.
+  - The `email_campaign_log` insert (audit record) remains in the function. Every successful send is logged with `signal_id`, `channel_label`, `resend_id`, and `triggered_by: "worker_escalation"`.
+- **Tests/verification:**
+  - Manual invocation on staging: created a fresh test signal with `skip_reason = "AI classified as uncertain; human review required"` and called the function with the staging service-role JWT → `{"ok":true,"skipped":false,"resend_id":"01a0665b-6b35-743d-9e8f-114468cbc6ff"}`.
+  - `email_campaign_log` row confirmed in staging DB with correct `resend_id`, `signal_id`, `channel_label: "GOLD BTCUSD XAUUSD FOREX SIGNALS"`.
+  - `verify_jwt=true` confirmed working: function list shows `v4 verify_jwt=True` on staging, `v2 verify_jwt=True` on prod.
+  - Post-rebase: `git push origin staging --force` and `git push origin staging:main` succeeded; all remotes at `e77f5d92`.
+- **Deploy state:** Committed on `staging` (`e77f5d92`), pushed to `origin/staging`, `origin/main`, `upstream/staging`. Edge function deployed to staging (v4) and prod (v2). The function is live — the next time the worker classifies a signal as `uncertain` and logs `ai_parse_review_required`, the approval email will be delivered.
+- **Follow-ups:** Monitor Resend delivery logs and `email_campaign_log` rows over the next few days to confirm emails are consistently delivered. If the user reports still not receiving emails, check their `user_profiles.notification_email_enabled` flag (the function returns `email_notifications_disabled` and skips the send when this is `false`).
+
 ### 2026-08-31 — FxSocket disconnect test flag fix: health probe created at startup
 
 - **Plain English:** The FxSocket outage test switch was not working on the staging trade worker. It only fired when someone had the broker dashboard open in a browser, because the piece of code that listens for a disconnect was only created on demand for the dashboard. With nobody watching the dashboard, the switch did nothing and the outage alert never fired. We now create a small "health probe" connection at worker startup when the test switch is on, so the switch works by itself and the outage alert fires without needing anyone to have the dashboard open.

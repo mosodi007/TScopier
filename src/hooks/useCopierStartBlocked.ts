@@ -59,6 +59,9 @@ export function useCopierStartBlocked() {
   return {
     copierStartBlocked: blocked,
     copierStartBlockedReason: reason as CopierStartBlockedReason | null,
+    missingBroker: blocked && reason === 'setup' && !hasConnectedBroker,
+    missingTelegram: blocked && reason === 'setup' && !telegramConnected,
+    missingChannels: blocked && reason === 'setup' && usage.telegramChannels === 0,
     resolving,
   }
 }
